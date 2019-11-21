@@ -16,27 +16,12 @@ use select::predicate::{Attr, Class, Name, Predicate};
 use futures::executor::block_on;
 
 
-fn deep_visit(dir: String)  {
-    let handle = thread::spawn(move || {
-    	println!("running  a new thread {:?}", dir);
-		let s = &dir;
-		let p = Path::new(s);
-    	visit_dirs(p);
-    });
-  	handle.join();
-}
 
 fn visit_dirs(dir: &Path) -> io::Result<()> {
-	// let handles:<Handle> = []
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            // if path.is_dir() {
-            //     deep_visit(String::from(path.to_string_lossy().to_string())); 
-            // } else {
-	           //  parse_file(&entry);
-            // }
 
             if path.is_dir() {
             	visit_dirs(&path);
@@ -44,11 +29,9 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 			    thread::spawn(move || {
 		            parse_file(&entry);
 			    });
-			    // handles.push(handle) 	
             }
         }
     }
-    // block_on(handles)
     Ok(())
 }
 
