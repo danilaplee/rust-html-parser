@@ -1,7 +1,10 @@
 extern crate whatlang;
 extern crate select;
 extern crate futures;
+extern crate chrono;
 
+use chrono::{Datelike, Timelike, Utc};
+use std::time::{Duration, Instant};
 use std::io;
 use std::fs::{self, DirEntry};
 use std::fs::File;
@@ -14,7 +17,6 @@ use whatlang::{detect, Lang, Script};
 use select::document::Document;
 use select::predicate::{Attr, Class, Name, Predicate};
 use futures::executor::block_on;
-
 
 
 fn visit_dirs(dir: &Path) -> io::Result<()> {
@@ -36,7 +38,10 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 }
 
 fn main() {
-    println!("Running tgnews v0.1");
+	let start_time = Utc::now();
+	let start = Instant::now();
+    println!("=============== RUNNING TGNEWS v0.2.0 ===============");
+    println!("=============== START TIME {} ===============", start_time);
     let args: Vec<String> = env::args().collect();
 
     let query = &args[1];
@@ -46,7 +51,11 @@ fn main() {
     println!("In folder {}", filename);
     let path = Path::new(filename);
     let result = visit_dirs(path);
-    println!("ALL DONE!");
+	let end_time = Utc::now();
+	let duration = start.elapsed();
+    println!("=============== ALL DONE! ===============");
+    println!("=============== END TIME {} ===============", end_time);
+    println!("=============== DURATION {:?} MINUTES ===============", (duration / 60));
 }
 
 
