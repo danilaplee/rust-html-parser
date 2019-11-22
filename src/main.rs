@@ -39,8 +39,35 @@ fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()
     println!("redis data {:?}", data);
     Ok(())
 }
-fn do_nothing() {
-	println!("panic attack");
+fn print_languages_start() {
+
+		let lang_en = r#"[
+	{
+		"lang_code": "en",
+		"articles": ["#;
+
+		println!("{}", lang_en);
+}
+fn print_languages_end(con: &mut redis::Connection) {
+
+		let rus_data : HashSet<String> = con.smembers("rus".to_string()).unwrap();
+
+		let lang_ru = r#"		""
+		]
+	},
+	{
+		"lang_code": "ru",
+		"articles": ["#;
+		let lang_end = r#"		]
+	}
+]
+		"#;
+		println!("{}", lang_ru);
+		for item in rus_data {
+			println!(r#"		{:?}, "#, item);
+		}
+		println!(r#"		"""#);
+		println!("{}", lang_end);
 }
 fn main() {
 
@@ -58,12 +85,7 @@ fn main() {
 	    println!("In folder {}", filename);
 	}
 	if query == "languages" {
-		let lang_en = r#"[
-	{
-		"lang_code": "en",
-		"articles": ["#;
-
-		println!("{}", lang_en);
+		print_languages_start();
 	}
     
     //CLEAN DB SYNC
@@ -84,25 +106,7 @@ fn main() {
 
 	//GET RESULT DATA
 	if query == "languages" {
-
-		let rus_data : HashSet<String> = con.smembers("rus".to_string()).unwrap();
-
-		let lang_ru = r#"		""
-		]
-	},
-	{
-		"lang_code": "ru",
-		"articles": ["#;
-		let lang_end = r#"		]
-	}
-]
-		"#;
-		println!("{}", lang_ru);
-		for item in rus_data {
-			println!(r#"		{:?}, "#, item);
-		}
-		println!(r#"		"""#);
-		println!("{}", lang_end);
+		print_languages_end(&mut con);
 	}
 
 	if query == "debug" {
