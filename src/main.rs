@@ -3,6 +3,7 @@ extern crate select;
 extern crate futures;
 extern crate chrono;
 extern crate redis;
+extern crate snips_nlu_lib;
 
 use chrono::{Datelike, Timelike, Utc};
 use std::time::{Duration, Instant};
@@ -22,16 +23,18 @@ use redis::Commands;
 use std::path::PathBuf;
 use std::time;
 
-fn deleteSet(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
+fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
     Ok(())
 }
 
-fn addToSet(con: &mut redis::Connection, ntype: &String, nitem: &String) -> redis::RedisResult<()> {
+fn add_to_set(con: &mut redis::Connection, ntype: &String, nitem: &String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("SADD").arg(ntype).arg(nitem).query(con)?;
     Ok(())
 }
-
+fn do_nothing() {
+	println!("panic attack");
+}
 fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -42,17 +45,25 @@ fn main() {
 	let start 		= Instant::now();
 	
 	if query == "debug" {
-	    println!("=============== RUNNING TGNEWS v0.2.0 ===============");
+	    println!("=============== RUNNING TGNEWS v0.3.1 ===============");
 	    println!("=============== START TIME {} ===============", start_time);
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
+	}
+	if query == "languages" {
+		let lang_start = r#"[
+	{
+		"lang_code": "en",
+		"articles": ["#;
+
+		println!("{}", lang_start);
 	}
     
     //CLEAN DB SYNC
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
     let mut con = client.get_connection().unwrap();
-    deleteSet(&mut con, "eng".to_string());
-    deleteSet(&mut con, "rus".to_string());
+    delete_set(&mut con, "eng".to_string());
+    delete_set(&mut con, "rus".to_string());
 
     //START DIRS
     let path = Path::new(filename);
@@ -91,7 +102,10 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 			    		println!("spawned a new thread {} for dir", ittr);
 			    	}
 
-		            parse_file(&entry);
+		            match parse_file(&entry) {
+			            Result::Ok(val) => val,
+			            Result::Err(err) => return,
+		            }
 			    });
 			    let _millis = time::Duration::from_millis(1);
 				let now = time::Instant::now();
@@ -116,24 +130,36 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
 	}
     let f = File::open(path)?;
     let reader = BufReader::new(f);
-    let document = Document::from_read(reader).unwrap();
+    let document = Document::from_read(reader)?;
     let mut h1 : String = "1".to_string();
-
+	if query == "debug" {
+	    println!("before error");
+	}
     for node in document.find( Name("h1") ) {
         h1 = node.text();
     }
-    let info = detect(&h1).unwrap();
+    let de = detect(&h1);
+
+    if de == None {
+    	return Ok(())
+    }
+    let info = de.unwrap();
+
     let eng = info.lang() == Lang::Eng;
     let rus = info.lang() == Lang::Rus;
 
     if eng || rus {
-	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-	    let mut con = client.get_connection().unwrap();
-	    let mut key = "eng";
-	    if rus {
-	    	key = "rus"
+	    let client = redis::Client::open("redis://127.0.0.1/")?;
+	    let mut con = client.get_connection()?;
+	    let mut key = "rus";
+	    if eng {
+	    	key = "eng";
+
+			if query == "languages" {
+				println!(r#"		{:?},"#, &pstr);
+			}
 	    }
-	    addToSet(&mut con, &key.to_string(), &pstr);
+	    add_to_set(&mut con, &key.to_string(), &pstr)?;
 		if query == "debug" {
 	    	println!("{}", &key);
 		}
