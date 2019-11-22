@@ -26,23 +26,27 @@ fn deleteSet(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<(
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
     Ok(())
 }
+
 fn addToSet(con: &mut redis::Connection, ntype: &String, nitem: &String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("SADD").arg(ntype).arg(nitem).query(con)?;
     Ok(())
 }
 
 fn main() {
-	let start_time = Utc::now();
-	let start = Instant::now();
-    println!("=============== RUNNING TGNEWS v0.2.0 ===============");
-    println!("=============== START TIME {} ===============", start_time);
-    let args: Vec<String> = env::args().collect();
 
-    let query = &args[1];
+    let args: Vec<String> = env::args().collect();
+    let query	 = &args[1];
     let filename = &args[2];
 
-    println!("Searching for {}", query);
-    println!("In folder {}", filename);
+	let start_time 	= Utc::now();
+	let start 		= Instant::now();
+	
+	if query == "debug" {
+	    println!("=============== RUNNING TGNEWS v0.2.0 ===============");
+	    println!("=============== START TIME {} ===============", start_time);
+	    println!("Searching for {}", query);
+	    println!("In folder {}", filename);
+	}
     
     //CLEAN DB SYNC
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
