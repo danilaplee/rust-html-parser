@@ -20,6 +20,7 @@ use select::document::Document;
 use select::predicate::{Attr, Class, Name, Predicate};
 use futures::executor::block_on;
 use redis::Commands;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time;
 
@@ -30,6 +31,12 @@ fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<
 
 fn add_to_set(con: &mut redis::Connection, ntype: &String, nitem: &String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("SADD").arg(ntype).arg(nitem).query(con)?;
+    Ok(())
+}
+
+fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()> {
+    let data = redis::cmd("SMEMBERS").arg(ntype).query(con)?;
+    println!("redis data {:?}", data);
     Ok(())
 }
 fn do_nothing() {
@@ -51,12 +58,12 @@ fn main() {
 	    println!("In folder {}", filename);
 	}
 	if query == "languages" {
-		let lang_start = r#"[
+		let lang_en = r#"[
 	{
 		"lang_code": "en",
 		"articles": ["#;
 
-		println!("{}", lang_start);
+		println!("{}", lang_en);
 	}
     
     //CLEAN DB SYNC
@@ -65,14 +72,38 @@ fn main() {
     delete_set(&mut con, "eng".to_string());
     delete_set(&mut con, "rus".to_string());
 
+	//START PERFORMANCE
+	let end_time = Utc::now();
+
     //START DIRS
     let path = Path::new(filename);
     let result = visit_dirs(path);
 	
-	//START PERFORMANCE
-	let end_time = Utc::now();
+	//COUNT PERFORMANCE
 	let duration = start.elapsed();
 
+	//GET RESULT DATA
+	if query == "languages" {
+
+		let rus_data : HashSet<String> = con.smembers("rus".to_string()).unwrap();
+
+		let lang_ru = r#"		""
+		]
+	},
+	{
+		"lang_code": "ru",
+		"articles": ["#;
+		let lang_end = r#"		]
+	}
+]
+		"#;
+		println!("{}", lang_ru);
+		for item in rus_data {
+			println!(r#"		{:?}, "#, item);
+		}
+		println!(r#"		"""#);
+		println!("{}", lang_end);
+	}
 
 	if query == "debug" {
 	    println!("=============== ALL DONE! ===============");

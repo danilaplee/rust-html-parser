@@ -3,6 +3,6 @@
 ```
 cargo run debug ./DataClusteringSample0817
 
-cargo run languages ./DataClusteringSample0817 --release
+cargo run languages ./DataClusteringSample0817
 
 ```
