@@ -1,5 +1,5 @@
 # rust-html-scrapper
 
 ```
-cargo run welcome ./DataClusteringSample0817
+cargo run debug ./DataClusteringSample0817
 ```
