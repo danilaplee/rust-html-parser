@@ -2,6 +2,7 @@ extern crate whatlang;
 extern crate select;
 extern crate futures;
 extern crate chrono;
+extern crate redis;
 
 use chrono::{Datelike, Timelike, Utc};
 use std::time::{Duration, Instant};
@@ -17,7 +18,8 @@ use whatlang::{detect, Lang, Script};
 use select::document::Document;
 use select::predicate::{Attr, Class, Name, Predicate};
 use futures::executor::block_on;
-
+use redis::Commands;
+use std::path::PathBuf;
 
 fn visit_dirs(dir: &Path) -> io::Result<()> {
     if dir.is_dir() {
@@ -34,6 +36,14 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
             }
         }
     }
+    Ok(())
+}
+fn deleteSet(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
+    let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
+    Ok(())
+}
+fn addToSet(con: &mut redis::Connection, ntype: &String, nitem: &String) -> redis::RedisResult<()> {
+    let _ : () = redis::cmd("SADD").arg(ntype).arg(nitem).query(con)?;
     Ok(())
 }
 
@@ -53,6 +63,13 @@ fn main() {
     let result = visit_dirs(path);
 	let end_time = Utc::now();
 	let duration = start.elapsed();
+    
+    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+    let mut con = client.get_connection().unwrap();
+
+    deleteSet(&mut con, "eng".to_string());
+    deleteSet(&mut con, "rus".to_string());
+
     println!("=============== ALL DONE! ===============");
     println!("=============== END TIME {} ===============", end_time);
     println!("=============== DURATION {:?} MINUTES ===============", (duration / 60));
@@ -61,7 +78,9 @@ fn main() {
 
 fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'static>> {
 
+
     let path = entry.path();
+    let pstr:String = String::from(path.as_path().to_str().unwrap());
 	println!("parsing File {:?}", path);
     let f = File::open(path)?;
     let reader = BufReader::new(f);
@@ -73,11 +92,17 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
     let info = detect(&h1).unwrap();
     let eng = info.lang() == Lang::Eng;
     let rus = info.lang() == Lang::Rus;
-    if eng || rus {
-    	println!("eng || rus");
+    
+    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+    let mut con = client.get_connection().unwrap();
+
+    if eng {
+	    addToSet(&mut con, &"eng".to_string(), &pstr);
+    	println!("eng");
     }
-    else {
-    	println!("unknown language");
+    if rus {
+	    addToSet(&mut con, &"rus".to_string(), &pstr);
+    	println!("rus");
     }
     Ok(())
 
