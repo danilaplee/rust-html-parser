@@ -93,10 +93,10 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 
 		            parse_file(&entry);
 			    });
-			    let ten_millis = time::Duration::from_millis(1);
+			    let _millis = time::Duration::from_millis(1);
 				let now = time::Instant::now();
 
-				thread::sleep(ten_millis);
+				thread::sleep(_millis);
             }
         }
     }
