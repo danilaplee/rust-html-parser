@@ -79,7 +79,7 @@ fn main() {
 	let start 		= Instant::now();
 	
 	if query == "debug" {
-	    println!("=============== RUNNING TGNEWS v0.3.1 ===============");
+	    println!("=============== RUNNING TGNEWS v0.4.2 ===============");
 	    println!("=============== START TIME {} ===============", start_time);
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
@@ -160,24 +160,27 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
 
     let path = entry.path();
     let pstr:String = String::from(path.as_path().to_str().unwrap());
+	
 	if query == "debug" {
 		println!("parsing File {:?}", path);
 	}
+
     let f = File::open(path)?;
     let reader = BufReader::new(f);
     let document = Document::from_read(reader)?;
+
     let mut h1 : String = "1".to_string();
-	if query == "debug" {
-	    println!("before error");
-	}
+
     for node in document.find( Name("h1") ) {
         h1 = node.text();
     }
+
     let de = detect(&h1);
 
     if de == None {
     	return Ok(())
     }
+
     let info = de.unwrap();
 
     let eng = info.lang() == Lang::Eng;
