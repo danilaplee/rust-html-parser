@@ -77,23 +77,43 @@ async fn run_python_service(con: &mut redis::Connection, query: &str) -> Result<
 	let output = Command::new("python3")
 	            .arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
 		        .stdout(Stdio::null())
+		        .stderr(Stdio::null())
 	            .spawn()
 	            .expect("failed to execute process");
 
 	let mut pubsub = con.as_pubsub();
-	pubsub.subscribe("tgnews_ner");
+	pubsub.subscribe("tgnews_nlu_reply");
 
-	println!("subscribed to tgnews_ner");
+	println!("subscribed to tgnews_nlu");
 
 	loop {
 	    let msg = pubsub.get_message()?;
 	    let payload : String = msg.get_payload()?;
-	    println!("channel '{}': {}", msg.get_channel_name(), payload);
 	    if payload == "listener_started" {
-	    	pubsub.unsubscribe("tgnews_ner")?;
+	    	pubsub.unsubscribe("tgnews_nlu")?;
 	    	return Ok(());
 	    }
 	}
+}
+
+fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    thread::spawn( || {
+	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+	    let mut con = client.get_connection().unwrap();
+		let mut pubsub = con.as_pubsub();
+		pubsub.subscribe("tgnews_nlu_reply");
+		loop {
+		    let msg = pubsub.get_message().unwrap();
+		    let payload : String = msg.get_payload().unwrap();
+		    println!("{}", payload);
+		    if payload == "stop" {
+		    	pubsub.unsubscribe("tgnews_nlu_reply");
+		    	// Ok(());
+		    }
+		}
+
+    });
+	Ok(())
 }
 
 fn main() {
@@ -118,9 +138,9 @@ fn main() {
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
 	    block_on(run_python_service(&mut con, &query));
-		if query == "debug" {
-		    println!("python setup done");
-		}
+	    println!("python setup done");
+	    run_nlu_listener();
+	    println!("listener setup done");
 	}
 
 	//SETUP LANGUAGES
@@ -182,7 +202,7 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 			            Result::Err(err) => return,
 		            }
 			    });
-			    let _millis = time::Duration::from_millis(2);
+			    let _millis = time::Duration::from_millis(5);
 				let now = time::Instant::now();
 
 				thread::sleep(_millis);
@@ -234,7 +254,9 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
 	    	key = "eng";
 
 			if query == "debug" {
-		    	println!("{}", &h1);
+		    	// println!("{}", &h1);
+		    	// println!("language: {}", &key);
+		    	// println!("path: {}", &pstr);
 			}
 			if query == "languages" {
 				println!(r#"		{:?},"#, &pstr);
@@ -242,7 +264,7 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
 	    }
 	    add_to_set(&mut con, &key.to_string(), &pstr)?;
 	    con.set(&pstr, &h1)?;
-	    con.publish("tgnews_ner".to_string(), &h1)?;
+	    con.publish("tgnews_nlu".to_string(), &h1)?;
     }
     Ok(())
 

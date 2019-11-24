@@ -14,15 +14,18 @@ def RedisListener():
     try:
 
         p = r.pubsub()                                                             
-        p.subscribe('tgnews_ner')
-        r.publish("tgnews_ner", "listener_started")                                                 
+        p.subscribe('tgnews_nlu')
+        r.publish("tgnews_nlu_reply", "listener_started")                                                 
         PAUSE = True
 
         while PAUSE:                                    
             message = p.get_message()                                               
             if message:
                 command = message['data'] 
-                print("NEW MESSAGE FOR REDIS LISTENER", command, model([str(command)]))                                             
+                mdata = model([str(command)])
+                r.publish("tgnews_nlu_reply", str(mdata));  
+                r.sadd("tgnews_parsed", str(command));
+                # print("NEW MESSAGE FOR REDIS LISTENER", command, model([str(command)]))                                             
 
     except Exception as e:
         print("!!!!!!!!!! EXCEPTION !!!!!!!!!")
