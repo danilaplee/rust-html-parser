@@ -3,11 +3,11 @@ extern crate select;
 extern crate futures;
 extern crate chrono;
 extern crate redis;
-extern crate snips_nlu_lib;
 
 use chrono::{Datelike, Timelike, Utc};
 use std::time::{Duration, Instant};
 use std::io;
+use std::str;
 use std::fs::{self, DirEntry};
 use std::fs::File;
 use std::path::Path;
@@ -23,6 +23,7 @@ use redis::Commands;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time;
+use std::process::{Command, Stdio};
 
 fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
@@ -69,6 +70,32 @@ fn print_languages_end(con: &mut redis::Connection) {
 		println!(r#"		"""#);
 		println!("{}", lang_end);
 }
+
+async fn run_python_service(con: &mut redis::Connection, query: &str) -> Result<(), Box<dyn std::error::Error + 'static>>   {
+
+
+	let output = Command::new("python3")
+	            .arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
+		        .stdout(Stdio::null())
+	            .spawn()
+	            .expect("failed to execute process");
+
+	let mut pubsub = con.as_pubsub();
+	pubsub.subscribe("tgnews_ner");
+
+	println!("subscribed to tgnews_ner");
+
+	loop {
+	    let msg = pubsub.get_message()?;
+	    let payload : String = msg.get_payload()?;
+	    println!("channel '{}': {}", msg.get_channel_name(), payload);
+	    if payload == "listener_started" {
+	    	pubsub.unsubscribe("tgnews_ner")?;
+	    	return Ok(());
+	    }
+	}
+}
+
 fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -78,21 +105,34 @@ fn main() {
 	let start_time 	= Utc::now();
 	let start 		= Instant::now();
 	
-	if query == "debug" {
-	    println!("=============== RUNNING TGNEWS v0.4.2 ===============");
-	    println!("=============== START TIME {} ===============", start_time);
-	    println!("Searching for {}", query);
-	    println!("In folder {}", filename);
-	}
-	if query == "languages" {
-		print_languages_start();
-	}
-    
     //CLEAN DB SYNC
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
     let mut con = client.get_connection().unwrap();
     delete_set(&mut con, "eng".to_string());
     delete_set(&mut con, "rus".to_string());
+
+    //SETUP DEBUG
+	if query == "debug" {
+	    println!("=============== RUNNING TGNEWS v0.4.2 ===============");
+	    println!("=============== START TIME {} ===============", start_time);
+	    println!("Searching for {}", query);
+	    println!("In folder {}", filename);
+	    block_on(run_python_service(&mut con, &query));
+		if query == "debug" {
+		    println!("python setup done");
+		}
+	}
+
+	//SETUP LANGUAGES
+	if query == "languages" {
+		print_languages_start();
+	}
+
+	//SETUP NEWS
+	if query == "news" {
+	    block_on(run_python_service(&mut con, &query));
+	}
+    
 
 	//START PERFORMANCE
 	let end_time = Utc::now();
@@ -134,7 +174,7 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 				    let query = &args[1];
 			    	
 			    	if query == "debug" {
-			    		println!("spawned a new thread {} for dir", ittr);
+			    		// println!("spawned a new thread {} for dir", ittr);
 			    	}
 
 		            match parse_file(&entry) {
@@ -142,7 +182,7 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 			            Result::Err(err) => return,
 		            }
 			    });
-			    let _millis = time::Duration::from_millis(1);
+			    let _millis = time::Duration::from_millis(2);
 				let now = time::Instant::now();
 
 				thread::sleep(_millis);
@@ -162,7 +202,7 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
     let pstr:String = String::from(path.as_path().to_str().unwrap());
 	
 	if query == "debug" {
-		println!("parsing File {:?}", path);
+		// println!("parsing File {:?}", path);
 	}
 
     let f = File::open(path)?;
@@ -193,14 +233,16 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
 	    if eng {
 	    	key = "eng";
 
+			if query == "debug" {
+		    	println!("{}", &h1);
+			}
 			if query == "languages" {
 				println!(r#"		{:?},"#, &pstr);
 			}
 	    }
 	    add_to_set(&mut con, &key.to_string(), &pstr)?;
-		if query == "debug" {
-	    	println!("{}", &key);
-		}
+	    con.set(&pstr, &h1)?;
+	    con.publish("tgnews_ner".to_string(), &h1)?;
     }
     Ok(())
 
