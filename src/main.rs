@@ -82,7 +82,7 @@ fn print_languages_end(con: &mut redis::Connection) {
 		println!("{}", lang_end);
 }
 
-async fn run_python_service(con: &mut redis::Connection, query: &str) -> Result<(), Box<dyn std::error::Error + 'static>>   {
+async fn run_nlu_service(con: &mut redis::Connection, query: &str) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 
 	let mut pubsub = con.as_pubsub();
 	pubsub.subscribe(tgnews_nlu_start);
@@ -194,7 +194,7 @@ fn main() {
 	    println!("=============== START TIME {} ===============", start_time);
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
-	    block_on(run_python_service(&mut con, &query));
+	    block_on(run_nlu_service(&mut con, &query));
 	    println!("python setup done");
 	    run_nlu_listener();
 	    println!("listener setup done");
@@ -207,7 +207,7 @@ fn main() {
 
 	//SETUP NEWS
 	if query == "news" {
-	    block_on(run_python_service(&mut con, &query));
+	    block_on(run_nlu_service(&mut con, &query));
 	    run_nlu_listener();
 	}
     

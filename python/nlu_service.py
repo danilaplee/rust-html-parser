@@ -26,7 +26,6 @@ def RedisListener():
         while PAUSE:                                    
             message = p.get_message()                                               
             if message:
-                # print("new message {}", message["data"])
                 if message["data"] == "done":
                     print("===== python done called =====")
                     PAUSE = False;
