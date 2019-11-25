@@ -5,4 +5,6 @@ cargo run debug ./DataClusteringSample0817
 
 cargo run languages ./DataClusteringSample0817
 
+cargo run news ./DataClusteringSample0817
+
 ```

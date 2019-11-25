@@ -3,9 +3,10 @@ extern crate select;
 extern crate futures;
 extern crate chrono;
 extern crate redis;
+extern crate json;
 
-use chrono::{Datelike, Timelike, Utc};
-use std::time::{Duration, Instant};
+use chrono::{Utc};
+use std::time::{Instant};
 use std::io;
 use std::str;
 use std::fs::{self, DirEntry};
@@ -14,16 +15,25 @@ use std::path::Path;
 use std::env;
 use std::thread;
 use std::io::BufReader;
-use std::net::SocketAddr;
-use whatlang::{detect, Lang, Script};
+use whatlang::{detect, Lang};
 use select::document::Document;
-use select::predicate::{Attr, Class, Name, Predicate};
+use select::predicate::{Name};
 use futures::executor::block_on;
 use redis::Commands;
+use redis::RedisResult;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time;
 use std::process::{Command, Stdio};
+use std::any::Any;
+use json::object;
+
+static tgnews_nlu_reply:&'static str = "tgnews_nlu_reply_list";
+static tgnews_nlu_request:&'static str = "tgnews_nlu_request_list";
+static tgnews_nlu:&'static str = "tgnews_nlu";
+static tgnews_nlu_start:&'static str = "tgnews_nlu_start";
+static tgnews_nlu_end:&'static str = "tgnews_nlu_end";
+static tgnews_nlu_reply_timeout:usize = 1;
 
 fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
@@ -37,7 +47,7 @@ fn add_to_set(con: &mut redis::Connection, ntype: &String, nitem: &String) -> re
 
 fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()> {
     let data = redis::cmd("SMEMBERS").arg(ntype).query(con)?;
-    println!("redis data {:?}", data);
+    // println!("redis data {:?}", data);
     Ok(())
 }
 fn print_languages_start() {
@@ -73,24 +83,44 @@ fn print_languages_end(con: &mut redis::Connection) {
 
 async fn run_python_service(con: &mut redis::Connection, query: &str) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 
-
-	let output = Command::new("python3")
-	            .arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
-		        .stdout(Stdio::null())
-		        .stderr(Stdio::null())
-	            .spawn()
-	            .expect("failed to execute process");
-
 	let mut pubsub = con.as_pubsub();
-	pubsub.subscribe("tgnews_nlu_reply");
-
-	println!("subscribed to tgnews_nlu");
+	pubsub.subscribe(tgnews_nlu_start);
+	if query == "debug" {
+		let python_process = Command::new("python3")
+		.arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
+        .stdout(Stdio::null())
+		.spawn()
+		.expect("failed to execute process");
+		println!("subscribed to tgnews_nlu");
+	}
+	else {
+		let python_process = Command::new("python3")
+		.arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+		.spawn()
+		.expect("failed to execute process");
+	}
 
 	loop {
 	    let msg = pubsub.get_message()?;
 	    let payload : String = msg.get_payload()?;
 	    if payload == "listener_started" {
-	    	pubsub.unsubscribe("tgnews_nlu")?;
+	    	pubsub.unsubscribe(tgnews_nlu_start)?;
+	    	return Ok(());
+	    }
+	}
+}
+
+async fn wait_for_nlu_completion(con: &mut redis::Connection) -> Result<(), Box<dyn std::error::Error + 'static>>   {
+
+	let mut pubsub = con.as_pubsub();
+	pubsub.subscribe(tgnews_nlu_end);
+	loop {
+	    let msg = pubsub.get_message()?;
+	    let payload : String = msg.get_payload()?;
+	    if payload == "done" {
+	    	pubsub.unsubscribe(tgnews_nlu_end)?;
 	    	return Ok(());
 	    }
 	}
@@ -98,19 +128,38 @@ async fn run_python_service(con: &mut redis::Connection, query: &str) -> Result<
 
 fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
     thread::spawn( || {
+	    let args: Vec<String> = env::args().collect();
+	    let query	 = &args[1];
 	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
 	    let mut con = client.get_connection().unwrap();
-		let mut pubsub = con.as_pubsub();
-		pubsub.subscribe("tgnews_nlu_reply");
-		loop {
-		    let msg = pubsub.get_message().unwrap();
-		    let payload : String = msg.get_payload().unwrap();
-		    println!("{}", payload);
-		    if payload == "stop" {
-		    	pubsub.unsubscribe("tgnews_nlu_reply");
-		    	// Ok(());
-		    }
-		}
+	    loop {
+			let res:Result<(String, String), redis::RedisError> = con.brpop(tgnews_nlu_reply, tgnews_nlu_reply_timeout);
+			match res {
+			    Ok(t) => { 
+			    	let (key, value) = t;
+			    	println!("nlu response data {}", value);
+
+			    	let data = json::parse(&value);
+			    	match data {
+			    		Ok(json_data) => {
+					    	println!("nlu response json {:?}", json_data);
+			    		},
+			    		Err(e) => {
+					        println!("nlu response json error: {}", e);
+			    		}
+			    	}
+			    	// Ok((data));
+			    },
+			    Err(e) => { 
+			        println!("nlu response error: {:?}", e.to_string());
+			        if e.to_string() == r#"Response was of incompatible type: "Not a bulk response" (response was nil)"# {
+			        	println!("end of line");
+					    let _ : () = con.publish(tgnews_nlu_end, "done".to_string()).unwrap();
+					    return;
+			        }
+			    },
+			}
+	    }
 
     });
 	Ok(())
@@ -130,6 +179,8 @@ fn main() {
     let mut con = client.get_connection().unwrap();
     delete_set(&mut con, "eng".to_string());
     delete_set(&mut con, "rus".to_string());
+    delete_set(&mut con, tgnews_nlu_reply.to_string());
+    delete_set(&mut con, tgnews_nlu_request.to_string());
 
     //SETUP DEBUG
 	if query == "debug" {
@@ -151,6 +202,7 @@ fn main() {
 	//SETUP NEWS
 	if query == "news" {
 	    block_on(run_python_service(&mut con, &query));
+	    run_nlu_listener();
 	}
     
 
@@ -170,9 +222,18 @@ fn main() {
 	}
 
 	if query == "debug" {
+		println!("====================== WAITING FOR NLU COMPLETION ======================");
+		println!("====================== WAITING FOR NLU COMPLETION ======================");
+		println!("====================== WAITING FOR NLU COMPLETION ======================");
+		println!("====================== WAITING FOR NLU COMPLETION ======================");
+		block_on(wait_for_nlu_completion(&mut con));
 	    println!("=============== ALL DONE! ===============");
 	    println!("=============== END TIME {} ===============", end_time);
 	    println!("=============== DURATION {:?} ===============", duration);
+	}
+	//SETUP NEWS
+	if query == "news" {
+		block_on(wait_for_nlu_completion(&mut con));
 	}
 
 }
@@ -202,7 +263,17 @@ fn visit_dirs(dir: &Path) -> io::Result<()> {
 			            Result::Err(err) => return,
 		            }
 			    });
-			    let _millis = time::Duration::from_millis(5);
+			    let args: Vec<String> = env::args().collect();
+			    let query = &args[1];
+			    
+			    let mut _millis = time::Duration::from_millis(10);
+
+				if query == "languages" {
+				    _millis = time::Duration::from_millis(1);
+				}
+				if query == "news" {
+				    _millis = time::Duration::from_millis(5);
+				}
 				let now = time::Instant::now();
 
 				thread::sleep(_millis);
@@ -263,8 +334,11 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
 			}
 	    }
 	    add_to_set(&mut con, &key.to_string(), &pstr)?;
-	    con.set(&pstr, &h1)?;
-	    con.publish("tgnews_nlu".to_string(), &h1)?;
+	    let lang_data = object!{
+	    	"h1" => h1,
+	    	"path" => pstr
+	    };
+	    con.publish(tgnews_nlu, lang_data.dump())?;
     }
     Ok(())
 
