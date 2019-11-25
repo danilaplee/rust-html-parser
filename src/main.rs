@@ -49,7 +49,6 @@ fn add_to_set(con: &mut redis::Connection, ntype: &String, nitem: &String) -> re
 
 fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()> {
     let data = redis::cmd("SMEMBERS").arg(ntype).query(con)?;
-    // println!("redis data {:?}", data);
     Ok(())
 }
 fn print_languages_start() {
@@ -61,12 +60,27 @@ fn print_languages_start() {
 
 		println!("{}", lang_en);
 }
+
+fn print_news_start() {
+
+		let start = r#"{
+		"articles": ["#;
+
+		println!("{}", start);
+}
+
+fn print_news_end() {
+
+		let end = r#"		]
+}"#;
+
+		println!("{}", end);
+}
 fn print_languages_end(con: &mut redis::Connection) {
 
 		let rus_data : HashSet<String> = con.smembers("rus".to_string()).unwrap();
 
-		let lang_ru = r#"		""
-		]
+		let lang_ru = r#"		]
 	},
 	{
 		"lang_code": "ru",
@@ -79,7 +93,6 @@ fn print_languages_end(con: &mut redis::Connection) {
 		for item in rus_data {
 			println!(r#"		{:?}, "#, item);
 		}
-		println!(r#"		"""#);
 		println!("{}", lang_end);
 }
 
@@ -139,6 +152,8 @@ fn process_nlu_data(data:JsonValue) {
 	let person_key 		= "PERSON".to_string();
 	let work_of_art_key = "WORK_OF_ART".to_string();
 	let money_key 		= "MONEY".to_string();
+	let product_key 	= "PRODUCT".to_string();
+	let loc_key 		= "LOC".to_string();
 
 	let mut current 	= 0;
 	let mut gpe 		= false;
@@ -147,8 +162,9 @@ fn process_nlu_data(data:JsonValue) {
 	let mut person 		= false;
 	let mut ordinal 	= false;
 	let mut event 		= false;
-	let mut loc 		= false;
+	let mut location 	= false;
 	let mut money 		= false;
+	let mut product 	= false;
 	let mut is_news 	= false;
 
 	while current <= meaning.len() {
@@ -169,8 +185,14 @@ fn process_nlu_data(data:JsonValue) {
 			if s == person_key  {
 				person = true;
 			}
+			if s == product_key  {
+				product = true;
+			}
 			if s == money_key  {
 				money = true;
+			}
+			if s == loc_key  {
+				location = true;
 			}
 		}
 		current += 1;
@@ -190,19 +212,22 @@ fn process_nlu_data(data:JsonValue) {
 			println!("news worthy: {:?}", data["h1"].to_string());
 		}
 		if query == "news" {
-			println!(r#"		{:?},"#, &data["path"]);
+			println!(r#"			{:?},"#, &data["path"].to_string());
 		}
 	}
-	let mut ndata = json::JsonValue::new_object();
+	let mut ndata 	= json::JsonValue::new_object();
 	ndata["news"] 	= json::JsonValue::Boolean(is_news);
 	ndata["org"] 	= json::JsonValue::Boolean(org);
 	ndata["gpe"] 	= json::JsonValue::Boolean(gpe);
 	ndata["person"] = json::JsonValue::Boolean(person);
+	ndata["product"]= json::JsonValue::Boolean(product);
 	ndata["money"] 	= json::JsonValue::Boolean(money);
+	ndata["loc"]	= json::JsonValue::Boolean(location);
 	ndata["art"] 	= json::JsonValue::Boolean(work_of_art);
 	ndata["path"] 	= json::JsonValue::String(data["path"].to_string());
 	ndata["h1"] 	= json::JsonValue::String(data["h1"].to_string());
 	ndata["lang"] 	= json::JsonValue::String(data["lang"].to_string());
+
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
     let mut con = client.get_connection().unwrap();
 	add_to_set(&mut con, &"news".to_string(), &ndata.dump());
@@ -289,6 +314,7 @@ fn main() {
 
 	//SETUP NEWS
 	if query == "news" {
+		print_news_start();
 	    block_on(run_nlu_service(&mut con, &query));
 	    run_nlu_listener();
 	}
@@ -323,6 +349,7 @@ fn main() {
 	//SETUP NEWS
 	if query == "news" {
 		block_on(wait_for_nlu_completion(&mut con));
+		print_news_end();
 	}
     let p2:() = con.publish(tgnews_nlu, "done").unwrap();
 
