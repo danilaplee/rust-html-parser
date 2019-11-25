@@ -7,7 +7,7 @@ import numpy as np
 
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
-PIPELINE_CONFIG_PATH = configs.ner.ner_ontonotes_bert
+PIPELINE_CONFIG_PATH = configs.ner.ner_ontonotes_bert_mult
 
 model = build_model(PIPELINE_CONFIG_PATH, download=False)
 tgnews_nlu_reply = "tgnews_nlu_reply_list"

@@ -27,6 +27,7 @@ use std::time;
 use std::process::{Command, Stdio};
 use std::any::Any;
 use json::object;
+use json::JsonValue;
 
 //REDIS KEYS
 static tgnews_nlu_reply:&'static str = "tgnews_nlu_reply_list";
@@ -127,6 +128,85 @@ async fn wait_for_nlu_completion(con: &mut redis::Connection) -> Result<(), Box<
 	    }
 	}
 }
+fn process_nlu_data(data:JsonValue) {
+	
+    let args:Vec<String>= env::args().collect();
+    let query	 		= &args[1];
+	let words 			= &data["response"][0][0];
+	let meaning 		= &data["response"][1][0];
+	let gpe_key 		= "GPE".to_string();
+	let org_key 		= "ORG".to_string();
+	let person_key 		= "PERSON".to_string();
+	let work_of_art_key = "WORK_OF_ART".to_string();
+	let money_key 		= "MONEY".to_string();
+
+	let mut current 	= 0;
+	let mut gpe 		= false;
+	let mut org 		= false;
+	let mut work_of_art = false;
+	let mut person 		= false;
+	let mut ordinal 	= false;
+	let mut event 		= false;
+	let mut loc 		= false;
+	let mut money 		= false;
+	let mut is_news 	= false;
+
+	while current <= meaning.len() {
+		let m = &meaning[current];
+		let mss = m.to_string();
+		let ms: Vec<&str> = mss.split("-").collect();
+		if ms.len() > 1 {
+			let s = ms[1].to_string();
+			if s == gpe_key {
+				gpe = true;
+			}
+			if s == org_key {
+				org = true;
+			}
+			if s == work_of_art_key  {
+				work_of_art = true;
+			}
+			if s == person_key  {
+				person = true;
+			}
+			if s == money_key  {
+				money = true;
+			}
+		}
+		current += 1;
+	}
+
+	if !is_news && (org || gpe || person) && money && is_news {
+		is_news = true;
+	}
+	if !is_news && org && gpe {
+		is_news = true;
+	}
+	if !is_news && work_of_art {
+		is_news = true;
+	}
+	if is_news {
+		if query == "debug" {
+			println!("news worthy: {:?}", data["h1"].to_string());
+		}
+		if query == "news" {
+			println!(r#"		{:?},"#, &data["path"]);
+		}
+	}
+	let mut ndata = json::JsonValue::new_object();
+	ndata["news"] 	= json::JsonValue::Boolean(is_news);
+	ndata["org"] 	= json::JsonValue::Boolean(org);
+	ndata["gpe"] 	= json::JsonValue::Boolean(gpe);
+	ndata["person"] = json::JsonValue::Boolean(person);
+	ndata["money"] 	= json::JsonValue::Boolean(money);
+	ndata["art"] 	= json::JsonValue::Boolean(work_of_art);
+	ndata["path"] 	= json::JsonValue::String(data["path"].to_string());
+	ndata["h1"] 	= json::JsonValue::String(data["h1"].to_string());
+	ndata["lang"] 	= json::JsonValue::String(data["lang"].to_string());
+    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+    let mut con = client.get_connection().unwrap();
+	add_to_set(&mut con, &"news".to_string(), &ndata.dump());
+}
 
 fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
     thread::spawn( || {
@@ -139,12 +219,13 @@ fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
 			match res {
 			    Ok(t) => { 
 			    	let (key, value) = t;
-			    	println!("nlu response data {}", value);
+			    	// println!("nlu response data {}", value);
 
 			    	let data = json::parse(&value);
 			    	match data {
 			    		Ok(json_data) => {
-					    	println!("nlu response json {:?}", json_data);
+					    	// println!("nlu response json {:?}", json_data);
+					    	process_nlu_data(json_data);
 			    		},
 			    		Err(e) => {
 					        if query == "debug" {
@@ -184,6 +265,7 @@ fn main() {
     let p1: () = con.publish(tgnews_nlu, "done").unwrap();
     delete_set(&mut con, "eng".to_string());
     delete_set(&mut con, "rus".to_string());
+    delete_set(&mut con, "news".to_string());
     delete_set(&mut con, tgnews_nlu_reply.to_string());
     delete_set(&mut con, tgnews_nlu_request.to_string());
 
@@ -344,7 +426,8 @@ fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'stati
 	    add_to_set(&mut con, &key.to_string(), &pstr)?;
 	    let lang_data = object!{
 	    	"h1" => h1,
-	    	"path" => pstr
+	    	"path" => pstr,
+	    	"lang" => key
 	    };
 	    con.publish(tgnews_nlu, lang_data.dump())?;
     }
