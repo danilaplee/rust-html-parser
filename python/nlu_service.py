@@ -14,6 +14,7 @@ tgnews_nlu_reply = "tgnews_nlu_reply_list"
 tgnews_nlu_start = "tgnews_nlu_start"
 tgnews_nlu_end = "tgnews_nlu_end"
 tgnews_nlu = "tgnews_nlu"
+
 def RedisListener():
     try:
 
@@ -21,18 +22,19 @@ def RedisListener():
         p.subscribe(tgnews_nlu)
         r.publish(tgnews_nlu_start, "listener_started")                                                 
         PAUSE = True
-
+        print('======= NLU SERVICE STARTED =======')
         while PAUSE:                                    
             message = p.get_message()                                               
             if message:
                 # print("new message {}", message["data"])
+                if message["data"] == "done":
+                    print("===== python done called =====")
+                    PAUSE = False;
+                    return;
                 try:
                     data = json.loads(str(message['data']))
-                    # print('==== json data =====', data)
-
                     data['response'] = model([str(data['h1'])])
                     response = json.dumps(data)
-                    # print("sending reply {}", response)
                     r.lpush(tgnews_nlu_reply, response);
                 except Exception:
                     print(traceback.print_exc())
@@ -44,5 +46,3 @@ def RedisListener():
         print(traceback.format_exc())
 
 RedisListener()
-
-print('======= NLU SERVICE STARTED =======')

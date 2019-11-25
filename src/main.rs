@@ -28,12 +28,13 @@ use std::process::{Command, Stdio};
 use std::any::Any;
 use json::object;
 
+//REDIS KEYS
 static tgnews_nlu_reply:&'static str = "tgnews_nlu_reply_list";
 static tgnews_nlu_request:&'static str = "tgnews_nlu_request_list";
 static tgnews_nlu:&'static str = "tgnews_nlu";
 static tgnews_nlu_start:&'static str = "tgnews_nlu_start";
 static tgnews_nlu_end:&'static str = "tgnews_nlu_end";
-static tgnews_nlu_reply_timeout:usize = 1;
+static tgnews_nlu_reply_timeout:usize = 5;
 
 fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
@@ -88,7 +89,8 @@ async fn run_python_service(con: &mut redis::Connection, query: &str) -> Result<
 	if query == "debug" {
 		let python_process = Command::new("python3")
 		.arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
-        .stdout(Stdio::null())
+        // .stdout(Stdio::null())
+        // .stderr(Stdio::null())
 		.spawn()
 		.expect("failed to execute process");
 		println!("subscribed to tgnews_nlu");
@@ -145,15 +147,20 @@ fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
 					    	println!("nlu response json {:?}", json_data);
 			    		},
 			    		Err(e) => {
-					        println!("nlu response json error: {}", e);
+					        if query == "debug" {
+						        println!("nlu response json error: {}", e);
+						    }
 			    		}
 			    	}
-			    	// Ok((data));
 			    },
 			    Err(e) => { 
-			        println!("nlu response error: {:?}", e.to_string());
+			        if query == "debug" {
+			        	println!("nlu response error: {:?}", e.to_string());
+			        }
 			        if e.to_string() == r#"Response was of incompatible type: "Not a bulk response" (response was nil)"# {
-			        	println!("end of line");
+				        if query == "debug" {
+				        	println!("end of line");
+				        }
 					    let _ : () = con.publish(tgnews_nlu_end, "done".to_string()).unwrap();
 					    return;
 			        }
@@ -170,18 +177,17 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let query	 = &args[1];
     let filename = &args[2];
-
-	let start_time 	= Utc::now();
-	let start 		= Instant::now();
 	
     //CLEAN DB SYNC
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
     let mut con = client.get_connection().unwrap();
+    let p1: () = con.publish(tgnews_nlu, "done").unwrap();
     delete_set(&mut con, "eng".to_string());
     delete_set(&mut con, "rus".to_string());
     delete_set(&mut con, tgnews_nlu_reply.to_string());
     delete_set(&mut con, tgnews_nlu_request.to_string());
 
+	let start_time 	= Utc::now();
     //SETUP DEBUG
 	if query == "debug" {
 	    println!("=============== RUNNING TGNEWS v0.4.2 ===============");
@@ -206,19 +212,17 @@ fn main() {
 	}
     
 
-	//START PERFORMANCE
-	let end_time = Utc::now();
+	let start 		= Instant::now();
 
     //START DIRS
     let path = Path::new(filename);
     let result = visit_dirs(path);
 	
-	//COUNT PERFORMANCE
-	let duration = start.elapsed();
 
 	//GET RESULT DATA
 	if query == "languages" {
 		print_languages_end(&mut con);
+		return;
 	}
 
 	if query == "debug" {
@@ -227,6 +231,9 @@ fn main() {
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		block_on(wait_for_nlu_completion(&mut con));
+		//COUNT PERFORMANCE
+		let end_time = Utc::now();
+		let duration = start.elapsed();
 	    println!("=============== ALL DONE! ===============");
 	    println!("=============== END TIME {} ===============", end_time);
 	    println!("=============== DURATION {:?} ===============", duration);
@@ -235,6 +242,7 @@ fn main() {
 	if query == "news" {
 		block_on(wait_for_nlu_completion(&mut con));
 	}
+    let p2:() = con.publish(tgnews_nlu, "done").unwrap();
 
 }
 
