@@ -85,11 +85,10 @@ fn main() {
     delete_set(&mut con, tgnews_nlu_reply.to_string());
     delete_set(&mut con, tgnews_nlu_request.to_string());
 
-	let start_time 	= Utc::now();
     //SETUP DEBUG
 	if query == "debug" {
 	    println!("=============== RUNNING TGNEWS v0.4.2 ===============");
-	    println!("=============== START TIME {} ===============", start_time);
+	    println!("=============== START TIME {} ===============", Utc::now());
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
 	    block_on(run_nlu_service(&mut con, &query));
