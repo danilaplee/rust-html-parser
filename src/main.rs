@@ -69,10 +69,11 @@ fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()
 }
 
 fn main() {
-
+	let bstart = Instant::now();
     let args: Vec<String> = env::args().collect();
     let query	 = &args[1];
     let filename = &args[2];
+    let mut bduration = Instant::now().elapsed();
 	
     //CLEAN DB SYNC
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
@@ -95,6 +96,8 @@ fn main() {
 	    println!("python setup done");
 	    run_nlu_listener();
 	    println!("listener setup done");
+	    bduration = bstart.elapsed();
+	    println!("total boot time: {:?}", bduration);
 	}
 
 	//SETUP LANGUAGES
@@ -110,14 +113,12 @@ fn main() {
 	}
     
 
-	let start 		= Instant::now();
-
     //START DIRS
+	let start = Instant::now();
     let path = Path::new(filename);
     let result = visit_dirs(path);
 	
 
-	//GET RESULT DATA
 	if query == "languages" {
 		print_languages_end(&mut con);
 		return;
@@ -135,6 +136,7 @@ fn main() {
 	    println!("=============== ALL DONE! ===============");
 	    println!("=============== END TIME {} ===============", end_time);
 	    println!("=============== DURATION {:?} ===============", duration);
+	    println!("=============== BDURATION {:?} ===============", bduration);
 	}
 	//SETUP NEWS
 	if query == "news" {

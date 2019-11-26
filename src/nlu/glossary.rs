@@ -29,8 +29,6 @@ use super::add_to_set;
 pub fn start() {
 	let sports:JsonValue = load_sports_glossary();
 	let games:JsonValue = load_games_glossary();
-	println!("sports: {}", sports.dump());
-	println!("games: {}", games.dump());
 }
 
 pub fn process_word() {
@@ -66,10 +64,7 @@ fn aggregate_glossary(entry: &DirEntry) -> json::JsonValue {
 
     	}
     }
-    println!("====== aggregate_glossary at path {:?} =======", &path);
-    // println!("{:?}", jdata);
 	return json::JsonValue::new_object();
-    // return jdata;
 }
 
 fn load_glossary(glossary_type:&str) -> json::JsonValue {
