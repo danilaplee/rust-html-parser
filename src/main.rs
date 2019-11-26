@@ -61,6 +61,7 @@ fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()
 fn main() {
 	let bstart = Instant::now();
 	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> = Arc::new(Mutex::new(VecDeque::new()));
+	let ruDB = Arc::new(Mutex:new(Vec<String>));
     let args: Vec<String> = env::args().collect();
     let query	 = &args[1];
     let filename = &args[2];

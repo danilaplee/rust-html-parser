@@ -31,6 +31,8 @@ pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>, offset:u64) {
 		let sports:Vec<String> 	= load_sports_glossary();
 		let games:Vec<String> 	= load_games_glossary();
 		let corp:Vec<String> 	= load_corp_glossary();
+		let science:Vec<String> = load_science_glossary();
+		let medicine:Vec<String>= load_medicine_glossary();
 
 		let mut not_finished = true;
 		while not_finished {
@@ -39,7 +41,7 @@ pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>, offset:u64) {
 		    	let item = mtx.pop_front();
 			    drop(lock);
 		    	if item != None {
-			    	process_item(item.unwrap(), &sports, &games, &corp);
+			    	process_item(&item.unwrap(), &sports, &games, &corp, &medicine, &science);
 		    	}
 		    } 
 		    let _millis = time::Duration::from_millis(offset);
@@ -49,36 +51,45 @@ pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>, offset:u64) {
     });
 }
 
-fn process_item(item:JsonValue,sports:&Vec<String>, games:&Vec<String>, corp:&Vec<String>) {
-	let h1 = &item["h1"].to_string();
+fn process_item(
+	item:&JsonValue,
+	sports:&Vec<String>, 
+	games:&Vec<String>, 
+	corp:&Vec<String>, 
+	medicine:&Vec<String>,
+	science:&Vec<String>) {
+	
 	// println!("found item in queue {:?}", h1);
-	let mut corp_score = 0;
-	let mut sports_score = 0;
-	for c in corp {
+	let h1 = &item["h1"].to_string();
+	let corp_score = find_theme_score(&item, corp);
+	let sports_score = find_theme_score(&item, sports);
+	let medicine_score = find_theme_score(&item, medicine);
+	let science_score = find_theme_score(&item, science);
+	if corp_score > 80 || sports_score > 80 || medicine_score > 80
+	|| science_score > 80 {
+		println!("glossary news: {:?}", &h1);
+		println!("corp score {}", &corp_score);
+		println!("sports score {}", &sports_score);
+		println!("medicine score {}", &medicine_score);
+		println!("science score {}", &science_score);
+	}
+}
+
+fn find_theme_score(item:&JsonValue,theme:&Vec<String>) -> i64 {
+
+	let mut _score = 0;
+	let h1 = &item["h1"].to_string();
+	for c in theme {
 		let sc = fuzzy_indices(&h1, &c);
 		if sc != None {
 			let (score, indices) = sc.unwrap();
 			// println!("score for {} in {}:{:?}",&c, &h1, score );
 			if score > 0 {
-				corp_score += score;
+				_score += score;
 			}
 		}
 	}
-	if corp_score > 80 {
-		println!("corp score {} for {}", &corp_score, &h1);
-	}
-	for s in sports {
-		let sc = fuzzy_indices(&h1, &s);
-		if sc != None {
-			let (score, indices) = sc.unwrap();
-			if score > 0 {
-				sports_score += score;
-			}
-		}
-	}
-	if sports_score > 80 {
-		println!("sports score {} for {}", &sports_score, &h1);
-	}
+	return _score;
 }
 
 pub fn process_text(text: &str) {
@@ -94,6 +105,63 @@ fn load_sports_glossary() -> Vec<String>  {
 	let mut ndata: Vec<String> = Vec::new();
 	let msports = data["glossary/sports/sports.json"]["sports"].members();
 	for ms in msports {
+		ndata.push(ms.to_string());
+	}
+	return ndata;
+}
+
+fn load_science_glossary() -> Vec<String> {
+	let keys = [
+		"glossary/science/planets.json",
+		"glossary/science/minor_planets.json",
+		"glossary/science/elements.json",
+		"glossary/science/weather_conditions.json",
+	].to_vec();
+	let data = get_required_assets(keys);
+	let mut ndata: Vec<String> = Vec::new();
+	let mweather = data["glossary/science/weather_conditions.json"]["conditions"].members();
+	for m in mweather {
+		ndata.push(m.to_string());
+	}
+	let mmplanets = data["glossary/science/minor_planets.json"]["minor_planets"].members();
+	for m in mmplanets {
+		ndata.push(m.to_string());
+	}
+	let mplanets = data["glossary/science/planets.json"]["planets"].members();
+	for m in mplanets {
+		ndata.push(m["name"].to_string());
+	}
+	let melements = data["glossary/science/elements.json"]["elements"].members();
+	for m in melements {
+		ndata.push(m["name"].to_string());
+		ndata.push(m["discoverer"].to_string());
+	}
+	return ndata;
+}
+
+fn load_medicine_glossary() -> Vec<String> {
+	let keys = [
+		"glossary/medicine/drugNameStems.json",
+		"glossary/medicine/cancer.json",
+		"glossary/medicine/hospitals.json",
+
+	].to_vec();
+	let data = get_required_assets(keys);
+	let mut ndata: Vec<String> = Vec::new();
+	let mdrugs = data["glossary/medicine/drugNameStems.json"]["stems"].members();
+	let mcancer = data["glossary/medicine/cancer.json"]["cancers"].members();
+	let mhospitals = data["glossary/medicine/hospitals.json"]["hospitals"].members();
+	let msymptoms = data["glossary/medicine/symptoms.json"]["symptoms"].members();
+	for ms in mdrugs {
+		ndata.push(ms.to_string());
+	}
+	for ms in mcancer {
+		ndata.push(ms.to_string());
+	}
+	for ms in mhospitals {
+		ndata.push(ms.to_string());
+	}
+	for ms in msymptoms {
 		ndata.push(ms.to_string());
 	}
 	return ndata;
@@ -116,22 +184,28 @@ fn load_corp_glossary() -> Vec<String> {
 	let keys = [
 		"glossary/corporations/fortune500.json",
 		"glossary/corporations/nasdaq.json",
-		"glossary/corporations/newspapers.json"
+		"glossary/corporations/newspapers.json",
+		"glossary/corporations/dija.json",
+		"glossary/humans/richpeople.json"
 	].to_vec();
 	let data = get_required_assets(keys);
 	let mut ndata: Vec<String> = Vec::new();
-	let mfortune = data["glossary/corporations/fortune500.json"]["companies"].members();
-	let mnews = data["glossary/corporations/newspapers.json"]["newspapers"].members();
-	let mnasdaq = data["glossary/corporations/nasdaq.json"]["corporations"].members();
-	for mfs in mfortune {
-		ndata.push(mfs.to_string());
+	for m in data["glossary/corporations/fortune500.json"]["companies"].members() {
+		ndata.push(m.to_string());
 	}
-	for mnws in mnews {
-		ndata.push(mnws.to_string());
+	for m in data["glossary/corporations/newspapers.json"]["newspapers"].members() {
+		ndata.push(m.to_string());
 	}
-	for mnqs in mnasdaq {
-		ndata.push(mnqs["symbol"].to_string());
-		ndata.push(mnqs["name"].to_string());
+	for m in data["glossary/corporations/nasdaq.json"]["corporations"].members() {
+		ndata.push(m["symbol"].to_string());
+		ndata.push(m["name"].to_string());
+	}
+	for m in data["glossary/corporations/dija.json"]["corporations"].members() {
+		ndata.push(m["name"].to_string());
+	}
+	for m in data["glossary/humans/richpeople.json"]["richPeople"].members(){
+		ndata.push(m["symbol"].to_string());
+		ndata.push(m["name"].to_string());
 	}
 	return ndata;
 }
