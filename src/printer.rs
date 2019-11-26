@@ -1,6 +1,5 @@
 extern crate redis;
 use redis::Commands;
-use redis::RedisResult;
 use std::collections::HashSet;
 
 pub fn print_languages_start() {

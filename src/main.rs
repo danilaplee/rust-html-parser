@@ -7,31 +7,22 @@ extern crate json;
 
 use chrono::{Utc};
 use std::time::{Instant};
-use std::io;
 use std::str;
 use std::fs::{self, DirEntry};
-use std::fs::File;
 use std::path::Path;
 use std::env;
-use std::thread;
-use std::io::BufReader;
-use whatlang::{detect, Lang};
-use select::document::Document;
-use select::predicate::{Name};
 use futures::executor::block_on;
 use redis::Commands;
-use redis::RedisResult;
-use std::collections::HashSet;
-use std::path::PathBuf;
-use std::time;
-use std::process::{Command, Stdio};
-use std::any::Any;
-use json::object;
+use std::sync::{Arc, Mutex};
+use std::collections::VecDeque;
 use json::JsonValue;
+use std::sync::mpsc::channel;
+use std::thread;
 
 mod printer;
 mod nlu;
 mod parser;
+mod rqueue;
 
 //REDIS KEYS
 static tgnews_nlu_reply:&'static str = "tgnews_nlu_reply_list";
@@ -52,6 +43,7 @@ use nlu::run_nlu_listener;
 use nlu::glossary;
 use parser::parse_file;
 use parser::visit_dirs;
+use rqueue::WorkQueue;
 
 fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
@@ -70,6 +62,7 @@ fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()
 
 fn main() {
 	let bstart = Instant::now();
+	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> = Arc::new(Mutex::new(VecDeque::new()));
     let args: Vec<String> = env::args().collect();
     let query	 = &args[1];
     let filename = &args[2];
@@ -84,6 +77,7 @@ fn main() {
     delete_set(&mut con, "news".to_string());
     delete_set(&mut con, tgnews_nlu_reply.to_string());
     delete_set(&mut con, tgnews_nlu_request.to_string());
+	let gls = glossary::start(Arc::clone(&gQueue));
 
     //SETUP DEBUG
 	if query == "debug" {
@@ -115,7 +109,7 @@ fn main() {
     //START DIRS
 	let start = Instant::now();
     let path = Path::new(filename);
-    let result = visit_dirs(path);
+    let result = visit_dirs(path, Arc::clone(&gQueue));
 	
 
 	if query == "languages" {

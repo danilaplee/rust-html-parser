@@ -1,10 +1,6 @@
 extern crate redis;
 use redis::Commands;
-use redis::RedisResult;
-use std::collections::HashSet;
-use json::object;
 use json::JsonValue;
-use std::fs::File;
 use std::env;
 use std::thread;
 use std::io;
@@ -41,8 +37,8 @@ pub async fn run_nlu_service(con: &mut redis::Connection, query: &str) -> Result
 	if query == "debug" {
 		let python_process = Command::new("python3")
 		.arg(f)
-        // .stdout(Stdio::null())
-        // .stderr(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
 		.spawn()
 		.expect("failed to execute process");
 		println!("subscribed to tgnews_nlu");
@@ -82,7 +78,6 @@ pub async fn wait_for_nlu_completion(con: &mut redis::Connection) -> Result<(), 
 
 pub fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
     thread::spawn( || {
-    	let gls = glossary::start();
 	    let args: Vec<String> = env::args().collect();
 	    let query	 = &args[1];
 	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();

@@ -27,6 +27,9 @@ use std::time;
 use std::process::{Command, Stdio};
 use json::object;
 use json::JsonValue;
+use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
+use std::collections::VecDeque;
 
 use super::tgnews_nlu_reply;
 use super::tgnews_nlu_request;
@@ -35,19 +38,24 @@ use super::tgnews_nlu_start;
 use super::tgnews_nlu_end;
 use super::tgnews_nlu_reply_timeout;
 use super::add_to_set;
+use crate::rqueue::WorkQueue;
 
+// static (tx, rx) = channel();
 
-pub fn visit_dirs(dir: &Path) -> io::Result<()> {
+pub fn visit_dirs(dir: &Path, data_store:Arc<Mutex<VecDeque<JsonValue>>>) -> io::Result<()> {
+
 
     let mut ittr = 0;
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
 	    	ittr += 1;
             let entry = entry?;
+
             let path = entry.path();
+		    let data = Arc::clone(&data_store);
 
             if path.is_dir() {
-            	visit_dirs(&path);
+            	visit_dirs(&path, data);
             } else {
 			    thread::spawn(move || {
 				    let args: Vec<String> = env::args().collect();
@@ -57,7 +65,7 @@ pub fn visit_dirs(dir: &Path) -> io::Result<()> {
 			    		// println!("spawned a new thread {} for dir", ittr);
 			    	}
 
-		            match parse_file(&entry) {
+		            match parse_file(&entry, data) {
 			            Result::Ok(val) => val,
 			            Result::Err(err) => return,
 		            }
@@ -83,7 +91,7 @@ pub fn visit_dirs(dir: &Path) -> io::Result<()> {
 }
 
 
-pub fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 'static>> {
+pub fn parse_file(entry: &DirEntry, queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
@@ -132,13 +140,15 @@ pub fn parse_file(entry: &DirEntry) -> Result<(), Box<dyn std::error::Error + 's
 				println!(r#"		{:?},"#, &pstr);
 			}
 	    }
-	    add_to_set(&mut con, &key.to_string(), &pstr)?;
 	    let lang_data = object!{
 	    	"h1" => h1,
-	    	"path" => pstr,
+	    	"path" => json::JsonValue::String(pstr.to_string()),
 	    	"lang" => key
 	    };
-	    con.publish(tgnews_nlu, lang_data.dump())?;
+
+	    add_to_set(&mut con, &key.to_string(), &pstr)?;
+	    con.publish(tgnews_nlu, &lang_data.dump())?;
+	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }
     Ok(())
 

@@ -1,8 +1,4 @@
 extern crate redis;
-use redis::Commands;
-use redis::RedisResult;
-use std::collections::HashSet;
-use json::object;
 use json::JsonValue;
 use std::fs::{self, DirEntry, File};
 use std::path::{PathBuf, Path};
@@ -10,13 +6,16 @@ use std::env;
 use std::thread;
 use std::io::BufReader;
 use std::process::{Command, Stdio};
-use super::tgnews_nlu_reply;
-use super::tgnews_nlu_request;
-use super::tgnews_nlu;
-use super::tgnews_nlu_start;
-use super::tgnews_nlu_end;
-use super::tgnews_nlu_reply_timeout;
-use super::add_to_set;
+use std::collections::VecDeque;
+use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
+use std::sync::{Arc, Mutex};
+
+use packer::Packer;
+use crate::rqueue::WorkQueue;
+
+#[derive(Packer)]
+#[packer(source = "glossary")]
+struct Assets;
 
 // Society (includes Politics, Elections, Legislation, Incidents, Crime)
 // Economy (includes Markets, Finance, Business)
@@ -26,61 +25,93 @@ use super::add_to_set;
 // Science (includes Health, Biology, Physics, Genetics)
 // Other (news articles that don't fall into any of the above categories)
 
-pub fn start() {
-	let sports:JsonValue = load_sports_glossary();
-	let games:JsonValue = load_games_glossary();
+pub fn start(gqueue:Arc<Mutex<VecDeque<JsonValue>>>) {
+	let sports:Vec<String> 	= load_sports_glossary();
+	let games:Vec<String> 	= load_games_glossary();
+	let corp:Vec<String> 	= load_corp_glossary();
+	println!("all__games: {:?}", games);
+	println!("total_games {:?}", games.len());
+	println!("all__sports: {:?}", sports);
+	println!("total_sports {:?}", sports.len());
+	println!("all__corp: {:?}", corp);
+	println!("total_corp {:?}", corp.len());
 }
 
-pub fn process_word() {
-
+pub fn process_text(text: &str) {
+	let (score, indices) = fuzzy_indices("axbycz", "abc").unwrap();
+	assert_eq!(indices, [0, 2, 4]);
 }
 
-fn load_sports_glossary() -> json::JsonValue  {
-	let data = load_glossary("sports");
+fn load_sports_glossary() -> Vec<String>  {
+	let keys = [
+		"glossary/sports/sports.json"
+	].to_vec();
+	let data = get_required_assets(keys);
+	let mut ndata: Vec<String> = Vec::new();
+	let msports = data["glossary/sports/sports.json"]["sports"].members();
+	for ms in msports {
+		ndata.push(ms.to_string());
+	}
+	return ndata;
+}
+
+fn load_games_glossary() -> Vec<String> {
+	let keys = [
+		"glossary/games/steam.json"
+	].to_vec();
+	let data = get_required_assets(keys);
+	let mut ndata: Vec<String> = Vec::new();
+	let msteam = data["glossary/games/steam.json"]["applist"]["apps"].members();
+	for ms in msteam {
+		ndata.push(ms["name"].to_string());
+	}
+	return ndata;
+}
+
+fn load_corp_glossary() -> Vec<String> {
+	let keys = [
+		"glossary/corporations/fortune500.json",
+		"glossary/corporations/nasdaq.json",
+		"glossary/corporations/newspapers.json"
+	].to_vec();
+	let data = get_required_assets(keys);
+	let mut ndata: Vec<String> = Vec::new();
+	let mfortune = data["glossary/corporations/fortune500.json"]["companies"].members();
+	let mnews = data["glossary/corporations/newspapers.json"]["newspapers"].members();
+	let mnasdaq = data["glossary/corporations/newspapers.json"]["corporations"].members();
+	for mfs in mfortune {
+		ndata.push(mfs.to_string());
+	}
+	for mnws in mnews {
+		ndata.push(mnws.to_string());
+	}
+	for mnqs in mnasdaq {
+		ndata.push(mnqs["symbol"].to_string());
+		ndata.push(mnqs["name"].to_string());
+	}
+	return ndata;
+}
+
+fn get_required_assets(keys:Vec<&str>) -> json::JsonValue {
+	let files = Assets::list();
+	let mut data = json::JsonValue::new_object();
+	for file in files {
+		let required = keys.contains(&file);
+		let raw = Assets::get_str(&file);
+		
+		if raw == None || !required {
+			continue;
+		}
+	    let jdata = json::parse(raw.unwrap());
+		match jdata {
+			Ok(jresult) => {
+				data[file] = jresult;
+			},
+			Err(e) => {
+
+			}
+		}
+	}
 	return data;
-}
 
-fn load_games_glossary() -> json::JsonValue {
-	let data = load_glossary("games");
-	return data;
-}
-
-fn aggregate_glossary(entry: &DirEntry) -> json::JsonValue {
-    let path = entry.path();
-    let data = fs::read_to_string(&path);
-    match data {
-    	Ok(raw) => {
-		    let jdata = json::parse(&raw);
-    		match jdata {
-    			Ok(jresult) => {
-    				return jresult;
-    			},
-    			Err(e) => {
-
-    			}
-    		}
-    	},
-    	Err(e) => {
-
-    	}
-    }
-	return json::JsonValue::new_object();
-}
-
-fn load_glossary(glossary_type:&str) -> json::JsonValue {
-		let dir = PathBuf::from(format!("./glossary/{}",glossary_type));
-		let mut entries = json::JsonValue::new_array();
-        for entry in fs::read_dir(dir).unwrap() {
-        	let entry = entry.unwrap();
-            let path = entry.path();
-            if path.is_dir() {
-            	for k in fs::read_dir(path).unwrap() {
-            		entries.push(aggregate_glossary(&k.unwrap()));
-            	}
-            }
-	        else {
-	        	entries.push(aggregate_glossary(&entry));
-	        }
-        }
-        return entries;
 }
