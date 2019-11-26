@@ -41,9 +41,7 @@ pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>, offset:u64) {
 		    	if item != None {
 			    	process_item(item.unwrap(), &sports, &games, &corp);
 		    	}
-		    } else {
-		        // println!("glossary try_lock failed");
-		    }
+		    } 
 		    let _millis = time::Duration::from_millis(offset);
 			thread::sleep(_millis);
 			

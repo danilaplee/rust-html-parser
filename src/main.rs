@@ -91,6 +91,10 @@ fn main() {
 	let gls14 = glossary::start(Arc::clone(&gQueue), 7);
 	let gls15 = glossary::start(Arc::clone(&gQueue), 8);
 	let gls16 = glossary::start(Arc::clone(&gQueue), 9);
+	// let gls17 = glossary::start(Arc::clone(&gQueue), 11);
+	// let gls18 = glossary::start(Arc::clone(&gQueue), 12);
+	// let gls19 = glossary::start(Arc::clone(&gQueue), 13);
+	// let gls20 = glossary::start(Arc::clone(&gQueue), 14);
 	// let gls21 = glossary::start(Arc::clone(&gQueue), 15);
 	// let gls22 = glossary::start(Arc::clone(&gQueue), 16);
 	// let gls23 = glossary::start(Arc::clone(&gQueue), 17);
