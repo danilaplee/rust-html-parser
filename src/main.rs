@@ -49,15 +49,9 @@ use nlu::run_nlu_service;
 use nlu::wait_for_nlu_completion;
 use nlu::process_nlu_data;
 use nlu::run_nlu_listener;
+use nlu::glossary;
 use parser::parse_file;
 use parser::visit_dirs;
-// Society (includes Politics, Elections, Legislation, Incidents, Crime)
-// Economy (includes Markets, Finance, Business)
-// Technology (includes Gadgets, Auto, Apps, Internet services)
-// Sports (includes E-Sports)
-// Entertainment (includes Movies, Music, Games, Books, Arts)
-// Science (includes Health, Biology, Physics, Genetics)
-// Other (news articles that don't fall into any of the above categories)
 
 fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;

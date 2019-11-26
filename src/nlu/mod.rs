@@ -5,10 +5,12 @@ use std::collections::HashSet;
 use json::object;
 use json::JsonValue;
 use std::fs::File;
-use std::path::Path;
 use std::env;
 use std::thread;
+use std::io;
 use std::process::{Command, Stdio};
+use path_clean::PathClean;
+use std::path::{PathBuf, Path};
 use super::tgnews_nlu_reply;
 use super::tgnews_nlu_request;
 use super::tgnews_nlu;
@@ -17,13 +19,28 @@ use super::tgnews_nlu_end;
 use super::tgnews_nlu_reply_timeout;
 use super::add_to_set;
 
+pub mod glossary;
+
+pub fn absolute_path<P>(path: P) -> io::Result<PathBuf>
+where
+    P: AsRef<Path>,
+{
+    let path = path.as_ref();
+    if path.is_absolute() {
+        Ok(path.to_path_buf().clean())
+    } else {
+        Ok(env::current_dir()?.join(path).clean())
+    }
+}
+
 pub async fn run_nlu_service(con: &mut redis::Connection, query: &str) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 
 	let mut pubsub = con.as_pubsub();
+    let f = absolute_path(PathBuf::from("./python/nlu_service.py")).unwrap().into_os_string();
 	pubsub.subscribe(tgnews_nlu_start);
 	if query == "debug" {
 		let python_process = Command::new("python3")
-		.arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
+		.arg(f)
         // .stdout(Stdio::null())
         // .stderr(Stdio::null())
 		.spawn()
@@ -32,7 +49,7 @@ pub async fn run_nlu_service(con: &mut redis::Connection, query: &str) -> Result
 	}
 	else {
 		let python_process = Command::new("python3")
-		.arg("/Users/danilapuzikov/dev/clones/telegram/python/nlu_service.py")
+		.arg(f)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
 		.spawn()
@@ -62,6 +79,52 @@ pub async fn wait_for_nlu_completion(con: &mut redis::Connection) -> Result<(), 
 	    }
 	}
 }
+
+pub fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    thread::spawn( || {
+	    let args: Vec<String> = env::args().collect();
+	    let query	 = &args[1];
+	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+	    let mut con = client.get_connection().unwrap();
+	    loop {
+			let res:Result<(String, String), redis::RedisError> = con.brpop(tgnews_nlu_reply, tgnews_nlu_reply_timeout);
+			match res {
+			    Ok(t) => { 
+			    	let (key, value) = t;
+			    	// println!("nlu response data {}", value);
+
+			    	let data = json::parse(&value);
+			    	match data {
+			    		Ok(json_data) => {
+					    	// println!("nlu response json {:?}", json_data);
+					    	process_nlu_data(json_data);
+			    		},
+			    		Err(e) => {
+					        if query == "debug" {
+						        println!("nlu response json error: {}", e);
+						    }
+			    		}
+			    	}
+			    },
+			    Err(e) => { 
+			        if query == "debug" {
+			        	println!("nlu response error: {:?}", e.to_string());
+			        }
+			        if e.to_string() == r#"Response was of incompatible type: "Not a bulk response" (response was nil)"# {
+				        if query == "debug" {
+				        	println!("end of line");
+				        }
+					    let _ : () = con.publish(tgnews_nlu_end, "done".to_string()).unwrap();
+					    return;
+			        }
+			    },
+			}
+	    }
+
+    });
+	Ok(())
+}
+
 pub fn process_nlu_data(data:JsonValue) {
 	
     let args:Vec<String>= env::args().collect();
@@ -148,67 +211,22 @@ pub fn process_nlu_data(data:JsonValue) {
 		if query == "news" {
 			println!(r#"			{:?},"#, &data["path"].to_string());
 		}
-	}
-	let mut ndata 	= json::JsonValue::new_object();
-	ndata["news"] 	= json::JsonValue::Boolean(is_news);
-	ndata["org"] 	= json::JsonValue::Boolean(org);
-	ndata["gpe"] 	= json::JsonValue::Boolean(gpe);
-	ndata["person"] = json::JsonValue::Boolean(person);
-	ndata["product"]= json::JsonValue::Boolean(product);
-	ndata["money"] 	= json::JsonValue::Boolean(money);
-	ndata["loc"]	= json::JsonValue::Boolean(location);
-	ndata["art"] 	= json::JsonValue::Boolean(work_of_art);
-	ndata["path"] 	= json::JsonValue::String(data["path"].to_string());
-	ndata["h1"] 	= json::JsonValue::String(data["h1"].to_string());
-	ndata["lang"] 	= json::JsonValue::String(data["lang"].to_string());
-	ndata["words"]	= words_map;
+		let mut ndata 	= json::JsonValue::new_object();
+		ndata["news"] 	= json::JsonValue::Boolean(is_news);
+		ndata["org"] 	= json::JsonValue::Boolean(org);
+		ndata["gpe"] 	= json::JsonValue::Boolean(gpe);
+		ndata["person"] = json::JsonValue::Boolean(person);
+		ndata["product"]= json::JsonValue::Boolean(product);
+		ndata["money"] 	= json::JsonValue::Boolean(money);
+		ndata["loc"]	= json::JsonValue::Boolean(location);
+		ndata["art"] 	= json::JsonValue::Boolean(work_of_art);
+		ndata["path"] 	= json::JsonValue::String(data["path"].to_string());
+		ndata["h1"] 	= json::JsonValue::String(data["h1"].to_string());
+		ndata["lang"] 	= json::JsonValue::String(data["lang"].to_string());
+		ndata["words"]	= words_map;
 
-    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-    let mut con = client.get_connection().unwrap();
-	add_to_set(&mut con, &"news".to_string(), &ndata.dump());
-}
-
-pub fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    thread::spawn( || {
-	    let args: Vec<String> = env::args().collect();
-	    let query	 = &args[1];
 	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
 	    let mut con = client.get_connection().unwrap();
-	    loop {
-			let res:Result<(String, String), redis::RedisError> = con.brpop(tgnews_nlu_reply, tgnews_nlu_reply_timeout);
-			match res {
-			    Ok(t) => { 
-			    	let (key, value) = t;
-			    	// println!("nlu response data {}", value);
-
-			    	let data = json::parse(&value);
-			    	match data {
-			    		Ok(json_data) => {
-					    	// println!("nlu response json {:?}", json_data);
-					    	process_nlu_data(json_data);
-			    		},
-			    		Err(e) => {
-					        if query == "debug" {
-						        println!("nlu response json error: {}", e);
-						    }
-			    		}
-			    	}
-			    },
-			    Err(e) => { 
-			        if query == "debug" {
-			        	println!("nlu response error: {:?}", e.to_string());
-			        }
-			        if e.to_string() == r#"Response was of incompatible type: "Not a bulk response" (response was nil)"# {
-				        if query == "debug" {
-				        	println!("end of line");
-				        }
-					    let _ : () = con.publish(tgnews_nlu_end, "done".to_string()).unwrap();
-					    return;
-			        }
-			    },
-			}
-	    }
-
-    });
-	Ok(())
+		add_to_set(&mut con, &"news".to_string(), &ndata.dump());
+	}
 }
