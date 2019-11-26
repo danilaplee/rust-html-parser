@@ -82,6 +82,7 @@ pub async fn wait_for_nlu_completion(con: &mut redis::Connection) -> Result<(), 
 
 pub fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
     thread::spawn( || {
+    	let gls = glossary::start();
 	    let args: Vec<String> = env::args().collect();
 	    let query	 = &args[1];
 	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
