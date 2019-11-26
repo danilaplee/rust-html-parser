@@ -30,23 +30,21 @@ pub fn print_news_end() {
 }
 pub fn print_languages_end(ruDB:Arc<Mutex<Vec<String>>>) {
 
-		// let rus_data : HashSet<String> = con.smembers("rus".to_string()).unwrap();
 		let mut rus_data:Vec<String> = Vec::new();
 	    let mut lock = ruDB.try_lock();
 	    if let Ok(ref mut mtx) = lock {
-	        // println!("total rus length: {:?}", mtx.len());
 	       	rus_data = mtx.to_vec();
 	    } else {
-	        // println!("parser second try_lock failed");
+	        // println!("languages end try_lock failed");
 	    }
 	    drop(lock);
-	    // println!("got rus data: {:?}", rus_data);
 
 		let lang_ru = r#"		]
 	},
 	{
 		"lang_code": "ru",
 		"articles": ["#;
+		
 		let lang_end = r#"		]
 	}
 ]"#;
