@@ -150,25 +150,25 @@ fn load_medicine_glossary() -> Vec<String> {
 	].to_vec();
 	let data = get_required_assets(keys);
 	let mut ndata: Vec<String> = Vec::new();
-	for ms in data["glossary/medicine/drugNameStems.json"]["stems"].members(); {
+	for ms in data["glossary/medicine/drugNameStems.json"]["stems"].members() {
 		ndata.push(ms.to_string());
 	}
-	for ms in data["glossary/medicine/cancer.json"]["cancers"].members(); {
+	for ms in data["glossary/medicine/cancer.json"]["cancers"].members() {
 		ndata.push(ms.to_string());
 	}
-	for ms in data["glossary/medicine/hospitals.json"]["hospitals"].members(); {
+	for ms in data["glossary/medicine/hospitals.json"]["hospitals"].members() {
 		ndata.push(ms.to_string());
 	}
-	for ms in data["glossary/medicine/symptoms.json"]["diagnoses"].members(); {
+	for ms in data["glossary/medicine/symptoms.json"]["diagnoses"].members() {
 		ndata.push(ms["desc"].to_string());
 	}
-	for ms in data["glossary/medicine/symptoms.json"]["symptoms"].members(); {
+	for ms in data["glossary/medicine/symptoms.json"]["symptoms"].members() {
 		ndata.push(ms.to_string());
 	}
-	for ms in data["glossary/medicine/infectious_diseases.json"]["diseases"].members(); {
+	for ms in data["glossary/medicine/infectious_diseases.json"]["diseases"].members() {
 		ndata.push(ms.to_string());
 	}
-	for ms in data["glossary/medicine/diseases.json"]["diseases"].members(); {
+	for ms in data["glossary/medicine/diseases.json"]["diseases"].members() {
 		for nn in ms.members() {
 			ndata.push(nn.to_string())
 		}

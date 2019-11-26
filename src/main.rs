@@ -59,9 +59,9 @@ fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()
 }
 
 fn main() {
-	let bstart = Instant::now();
-	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> = Arc::new(Mutex::new(VecDeque::new()));
-	let ruDB = Arc::new(Mutex:new(Vec<String>));
+	let bstart 									= Instant::now();
+	let ruDB:Arc<Mutex<Vec<String>>> 			= Arc::new(Mutex::new(Vec::new()));
+	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> 	= Arc::new(Mutex::new(VecDeque::new()));
     let args: Vec<String> = env::args().collect();
     let query	 = &args[1];
     let filename = &args[2];
@@ -92,22 +92,6 @@ fn main() {
 	let gls14 = glossary::start(Arc::clone(&gQueue), 7);
 	let gls15 = glossary::start(Arc::clone(&gQueue), 8);
 	let gls16 = glossary::start(Arc::clone(&gQueue), 9);
-	// let gls17 = glossary::start(Arc::clone(&gQueue), 11);
-	// let gls18 = glossary::start(Arc::clone(&gQueue), 12);
-	// let gls19 = glossary::start(Arc::clone(&gQueue), 13);
-	// let gls20 = glossary::start(Arc::clone(&gQueue), 14);
-	// let gls21 = glossary::start(Arc::clone(&gQueue), 15);
-	// let gls22 = glossary::start(Arc::clone(&gQueue), 16);
-	// let gls23 = glossary::start(Arc::clone(&gQueue), 17);
-	// let gls24 = glossary::start(Arc::clone(&gQueue), 18);
-	// let gls25 = glossary::start(Arc::clone(&gQueue), 19);
-	// let gls26 = glossary::start(Arc::clone(&gQueue), 5);
-	// let gls27 = glossary::start(Arc::clone(&gQueue), 3);
-	// let gls28 = glossary::start(Arc::clone(&gQueue), 4);
-	// let gls29 = glossary::start(Arc::clone(&gQueue), 6);
-	// let gls30 = glossary::start(Arc::clone(&gQueue), 7);
-	// let gls31 = glossary::start(Arc::clone(&gQueue), 8);
-	// let gls32 = glossary::start(Arc::clone(&gQueue), 9);
 
     //SETUP DEBUG
 	if query == "debug" {
@@ -139,11 +123,11 @@ fn main() {
     //START DIRS
 	let start = Instant::now();
     let path = Path::new(filename);
-    let result = visit_dirs(path, Arc::clone(&gQueue));
+    let result = visit_dirs(path, Arc::clone(&gQueue), Arc::clone(&ruDB));
 	
 
 	if query == "languages" {
-		print_languages_end(&mut con);
+		print_languages_end(Arc::clone(&ruDB));
 		return;
 	}
 

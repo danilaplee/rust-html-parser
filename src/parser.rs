@@ -39,7 +39,10 @@ use super::tgnews_nlu_end;
 use super::tgnews_nlu_reply_timeout;
 use super::add_to_set;
 
-pub fn visit_dirs(dir: &Path, data_store:Arc<Mutex<VecDeque<JsonValue>>>) -> io::Result<()> {
+pub fn visit_dirs(
+	dir: &Path, 
+	queue:Arc<Mutex<VecDeque<JsonValue>>>,
+	ruDB:Arc<Mutex<Vec<String>>>) -> io::Result<()> {
 
 
     let mut ittr = 0;
@@ -49,10 +52,11 @@ pub fn visit_dirs(dir: &Path, data_store:Arc<Mutex<VecDeque<JsonValue>>>) -> io:
             let entry = entry?;
 
             let path = entry.path();
-		    let data = Arc::clone(&data_store);
+		    let q = Arc::clone(&queue);
+		    let rus = Arc::clone(&ruDB);
 
             if path.is_dir() {
-            	visit_dirs(&path, data);
+            	visit_dirs(&path, q, rus);
             } else {
 			    thread::spawn(move || {
 				    let args: Vec<String> = env::args().collect();
@@ -62,7 +66,7 @@ pub fn visit_dirs(dir: &Path, data_store:Arc<Mutex<VecDeque<JsonValue>>>) -> io:
 			    		// println!("spawned a new thread {} for dir", ittr);
 			    	}
 
-		            match parse_file(&entry, data) {
+		            match parse_file(&entry, q, rus) {
 			            Result::Ok(val) => val,
 			            Result::Err(err) => return,
 		            }
@@ -87,7 +91,9 @@ pub fn visit_dirs(dir: &Path, data_store:Arc<Mutex<VecDeque<JsonValue>>>) -> io:
 }
 
 
-pub fn parse_file(entry: &DirEntry, queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Result<(), Box<dyn std::error::Error + 'static>> {
+pub fn parse_file(entry: &DirEntry, 
+	queue:Arc<Mutex<VecDeque<JsonValue>>>,
+	ruDB:Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
@@ -149,9 +155,19 @@ pub fn parse_file(entry: &DirEntry, queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Re
 	        // println!("total queue length: {:?}", mtx.len());
 	       	mtx.push_back(lang_data);
 	    } else {
-	        println!("parser try_lock failed");
+	        // println!("parser first try_lock failed");
 	    }
 	    drop(lock);
+	    if key == "rus" {
+		    let mut lock2 = ruDB.try_lock();
+		    if let Ok(ref mut mtx2) = lock2 {
+		        // println!("total queue length: {:?}", mtx.len());
+		       	mtx2.push(pstr);
+		    } else {
+		        // println!("parser second try_lock failed");
+		    }
+		    drop(lock2);
+	    }
 	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }
     Ok(())
