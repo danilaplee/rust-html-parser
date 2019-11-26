@@ -81,7 +81,6 @@ pub fn visit_dirs(dir: &Path, data_store:Arc<Mutex<VecDeque<JsonValue>>>) -> io:
 				if query == "news" {
 				    _millis = time::Duration::from_millis(5);
 				}
-				let now = time::Instant::now();
 
 				thread::sleep(_millis);
             }
@@ -148,6 +147,14 @@ pub fn parse_file(entry: &DirEntry, queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Re
 
 	    add_to_set(&mut con, &key.to_string(), &pstr)?;
 	    con.publish(tgnews_nlu, &lang_data.dump())?;
+	    let mut lock = queue.try_lock();
+	    if let Ok(ref mut mtx) = lock {
+	        println!("total queue length: {:?}", mtx.len());
+	       	mtx.push_back(lang_data);
+	    } else {
+	        println!("parser try_lock failed");
+	    }
+	    drop(lock);
 	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }
     Ok(())

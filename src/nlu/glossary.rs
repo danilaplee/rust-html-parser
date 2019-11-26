@@ -3,6 +3,7 @@ use json::JsonValue;
 use std::fs::{self, DirEntry, File};
 use std::path::{PathBuf, Path};
 use std::env;
+use std::time;
 use std::thread;
 use std::io::BufReader;
 use std::process::{Command, Stdio};
@@ -25,16 +26,41 @@ struct Assets;
 // Science (includes Health, Biology, Physics, Genetics)
 // Other (news articles that don't fall into any of the above categories)
 
-pub fn start(gqueue:Arc<Mutex<VecDeque<JsonValue>>>) {
-	let sports:Vec<String> 	= load_sports_glossary();
-	let games:Vec<String> 	= load_games_glossary();
-	let corp:Vec<String> 	= load_corp_glossary();
-	println!("all__games: {:?}", games);
-	println!("total_games {:?}", games.len());
-	println!("all__sports: {:?}", sports);
-	println!("total_sports {:?}", sports.len());
-	println!("all__corp: {:?}", corp);
-	println!("total_corp {:?}", corp.len());
+pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>) {
+    thread::spawn(move || {
+
+		let sports:Vec<String> 	= load_sports_glossary();
+		let games:Vec<String> 	= load_games_glossary();
+		let corp:Vec<String> 	= load_corp_glossary();
+		println!("all__games: {:?}", games);
+		println!("total_games {:?}", games.len());
+		println!("all__sports: {:?}", sports);
+		println!("total_sports {:?}", sports.len());
+		println!("all__corp: {:?}", corp);
+		println!("total_corp {:?}", corp.len());
+
+		let mut not_finished = true;
+		while not_finished {
+		    let mut lock = queue.try_lock();
+		    if let Ok(ref mut mtx) = lock {
+		    	let item = mtx.pop_front();
+		    	if item != None {
+			    	process_item(item.unwrap(), &sports, &games, &corp);
+		    	}
+		    } else {
+		        println!("glossary try_lock failed");
+		    }
+		    drop(lock);
+		    let _millis = time::Duration::from_millis(10);
+			thread::sleep(_millis);
+			
+		}
+    });
+}
+
+fn process_item(item:JsonValue, sports:&Vec<String>, games:&Vec<String>,corp:&Vec<String>) {
+	println!("found item in queue {:?}", item);
+
 }
 
 pub fn process_text(text: &str) {
