@@ -22,7 +22,6 @@ use std::thread;
 mod printer;
 mod nlu;
 mod parser;
-mod rqueue;
 
 //REDIS KEYS
 static tgnews_nlu_reply:&'static str = "tgnews_nlu_reply_list";
@@ -43,7 +42,6 @@ use nlu::run_nlu_listener;
 use nlu::glossary;
 use parser::parse_file;
 use parser::visit_dirs;
-use rqueue::WorkQueue;
 
 fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
     let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
@@ -77,7 +75,34 @@ fn main() {
     delete_set(&mut con, "news".to_string());
     delete_set(&mut con, tgnews_nlu_reply.to_string());
     delete_set(&mut con, tgnews_nlu_request.to_string());
-	let gls = glossary::start(Arc::clone(&gQueue));
+	let gls01 = glossary::start(Arc::clone(&gQueue), 11);
+	let gls02 = glossary::start(Arc::clone(&gQueue), 12);
+	let gls03 = glossary::start(Arc::clone(&gQueue), 13);
+	let gls04 = glossary::start(Arc::clone(&gQueue), 14);
+	let gls05 = glossary::start(Arc::clone(&gQueue), 15);
+	let gls06 = glossary::start(Arc::clone(&gQueue), 16);
+	let gls07 = glossary::start(Arc::clone(&gQueue), 17);
+	let gls08 = glossary::start(Arc::clone(&gQueue), 18);
+	let gls09 = glossary::start(Arc::clone(&gQueue), 19);
+	let gls10 = glossary::start(Arc::clone(&gQueue), 5);
+	let gls11 = glossary::start(Arc::clone(&gQueue), 3);
+	let gls12 = glossary::start(Arc::clone(&gQueue), 4);
+	let gls13 = glossary::start(Arc::clone(&gQueue), 6);
+	let gls14 = glossary::start(Arc::clone(&gQueue), 7);
+	let gls15 = glossary::start(Arc::clone(&gQueue), 8);
+	let gls16 = glossary::start(Arc::clone(&gQueue), 9);
+	// let gls21 = glossary::start(Arc::clone(&gQueue), 15);
+	// let gls22 = glossary::start(Arc::clone(&gQueue), 16);
+	// let gls23 = glossary::start(Arc::clone(&gQueue), 17);
+	// let gls24 = glossary::start(Arc::clone(&gQueue), 18);
+	// let gls25 = glossary::start(Arc::clone(&gQueue), 19);
+	// let gls26 = glossary::start(Arc::clone(&gQueue), 5);
+	// let gls27 = glossary::start(Arc::clone(&gQueue), 3);
+	// let gls28 = glossary::start(Arc::clone(&gQueue), 4);
+	// let gls29 = glossary::start(Arc::clone(&gQueue), 6);
+	// let gls30 = glossary::start(Arc::clone(&gQueue), 7);
+	// let gls31 = glossary::start(Arc::clone(&gQueue), 8);
+	// let gls32 = glossary::start(Arc::clone(&gQueue), 9);
 
     //SETUP DEBUG
 	if query == "debug" {
@@ -122,7 +147,7 @@ fn main() {
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
-		block_on(wait_for_nlu_completion(&mut con));
+		block_on(wait_for_nlu_completion(&mut con, Arc::clone(&gQueue)));
 		//COUNT PERFORMANCE
 		let end_time = Utc::now();
 		let duration = start.elapsed();
@@ -133,7 +158,7 @@ fn main() {
 	}
 	//SETUP NEWS
 	if query == "news" {
-		block_on(wait_for_nlu_completion(&mut con));
+		block_on(wait_for_nlu_completion(&mut con, Arc::clone(&gQueue)));
 		print_news_end();
 	}
     let p2:() = con.publish(tgnews_nlu, "done").unwrap();

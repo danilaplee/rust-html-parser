@@ -38,9 +38,6 @@ use super::tgnews_nlu_start;
 use super::tgnews_nlu_end;
 use super::tgnews_nlu_reply_timeout;
 use super::add_to_set;
-use crate::rqueue::WorkQueue;
-
-// static (tx, rx) = channel();
 
 pub fn visit_dirs(dir: &Path, data_store:Arc<Mutex<VecDeque<JsonValue>>>) -> io::Result<()> {
 
@@ -149,7 +146,7 @@ pub fn parse_file(entry: &DirEntry, queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Re
 	    con.publish(tgnews_nlu, &lang_data.dump())?;
 	    let mut lock = queue.try_lock();
 	    if let Ok(ref mut mtx) = lock {
-	        println!("total queue length: {:?}", mtx.len());
+	        // println!("total queue length: {:?}", mtx.len());
 	       	mtx.push_back(lang_data);
 	    } else {
 	        println!("parser try_lock failed");

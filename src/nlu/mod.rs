@@ -14,6 +14,9 @@ use super::tgnews_nlu_start;
 use super::tgnews_nlu_end;
 use super::tgnews_nlu_reply_timeout;
 use super::add_to_set;
+use std::time;
+use std::sync::{Arc, Mutex};
+use std::collections::VecDeque;
 
 pub mod glossary;
 
@@ -62,16 +65,32 @@ pub async fn run_nlu_service(con: &mut redis::Connection, query: &str) -> Result
 	}
 }
 
-pub async fn wait_for_nlu_completion(con: &mut redis::Connection) -> Result<(), Box<dyn std::error::Error + 'static>>   {
+pub async fn wait_for_nlu_completion(con: &mut redis::Connection, queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 
 	let mut pubsub = con.as_pubsub();
+	let mut done = false;
 	pubsub.subscribe(tgnews_nlu_end);
 	loop {
-	    let msg = pubsub.get_message()?;
-	    let payload : String = msg.get_payload()?;
-	    if payload == "done" {
-	    	pubsub.unsubscribe(tgnews_nlu_end)?;
-	    	return Ok(());
+	    if done {
+		    let mut lock = queue.try_lock();
+		    if let Ok(ref mut mtx) = lock {
+		        println!("total queue length: {:?}", mtx.len());
+		        if mtx.len() == 0 {
+		        	return Ok(());
+		        }
+		    } else {
+		        println!("completion try_lock failed");
+		    }
+		    drop(lock);
+		    let _millis = time::Duration::from_millis(1000);
+			thread::sleep(_millis);
+	    } else {
+		    let msg = pubsub.get_message()?;
+		    let payload : String = msg.get_payload()?;
+		    if payload == "done" {
+		    	done = true;
+		    	pubsub.unsubscribe(tgnews_nlu_end)?;
+		    }
 	    }
 	}
 }

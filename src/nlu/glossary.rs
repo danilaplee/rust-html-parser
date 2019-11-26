@@ -12,7 +12,6 @@ use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
 use std::sync::{Arc, Mutex};
 
 use packer::Packer;
-use crate::rqueue::WorkQueue;
 
 #[derive(Packer)]
 #[packer(source = "glossary")]
@@ -26,41 +25,62 @@ struct Assets;
 // Science (includes Health, Biology, Physics, Genetics)
 // Other (news articles that don't fall into any of the above categories)
 
-pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>) {
+pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>, offset:u64) {
     thread::spawn(move || {
 
 		let sports:Vec<String> 	= load_sports_glossary();
 		let games:Vec<String> 	= load_games_glossary();
 		let corp:Vec<String> 	= load_corp_glossary();
-		println!("all__games: {:?}", games);
-		println!("total_games {:?}", games.len());
-		println!("all__sports: {:?}", sports);
-		println!("total_sports {:?}", sports.len());
-		println!("all__corp: {:?}", corp);
-		println!("total_corp {:?}", corp.len());
 
 		let mut not_finished = true;
 		while not_finished {
 		    let mut lock = queue.try_lock();
 		    if let Ok(ref mut mtx) = lock {
 		    	let item = mtx.pop_front();
+			    drop(lock);
 		    	if item != None {
 			    	process_item(item.unwrap(), &sports, &games, &corp);
 		    	}
 		    } else {
-		        println!("glossary try_lock failed");
+		        // println!("glossary try_lock failed");
 		    }
-		    drop(lock);
-		    let _millis = time::Duration::from_millis(10);
+		    let _millis = time::Duration::from_millis(offset);
 			thread::sleep(_millis);
 			
 		}
     });
 }
 
-fn process_item(item:JsonValue, sports:&Vec<String>, games:&Vec<String>,corp:&Vec<String>) {
-	println!("found item in queue {:?}", item);
-
+fn process_item(item:JsonValue,sports:&Vec<String>, games:&Vec<String>, corp:&Vec<String>) {
+	let h1 = &item["h1"].to_string();
+	// println!("found item in queue {:?}", h1);
+	let mut corp_score = 0;
+	let mut sports_score = 0;
+	for c in corp {
+		let sc = fuzzy_indices(&h1, &c);
+		if sc != None {
+			let (score, indices) = sc.unwrap();
+			// println!("score for {} in {}:{:?}",&c, &h1, score );
+			if score > 0 {
+				corp_score += score;
+			}
+		}
+	}
+	if corp_score > 80 {
+		println!("corp score {} for {}", &corp_score, &h1);
+	}
+	for s in sports {
+		let sc = fuzzy_indices(&h1, &s);
+		if sc != None {
+			let (score, indices) = sc.unwrap();
+			if score > 0 {
+				sports_score += score;
+			}
+		}
+	}
+	if sports_score > 80 {
+		println!("sports score {} for {}", &sports_score, &h1);
+	}
 }
 
 pub fn process_text(text: &str) {
@@ -104,7 +124,7 @@ fn load_corp_glossary() -> Vec<String> {
 	let mut ndata: Vec<String> = Vec::new();
 	let mfortune = data["glossary/corporations/fortune500.json"]["companies"].members();
 	let mnews = data["glossary/corporations/newspapers.json"]["newspapers"].members();
-	let mnasdaq = data["glossary/corporations/newspapers.json"]["corporations"].members();
+	let mnasdaq = data["glossary/corporations/nasdaq.json"]["corporations"].members();
 	for mfs in mfortune {
 		ndata.push(mfs.to_string());
 	}
