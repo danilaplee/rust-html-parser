@@ -25,28 +25,40 @@ struct Assets;
 // Science (includes Health, Biology, Physics, Genetics)
 // Other (news articles that don't fall into any of the above categories)
 
-pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>, offset:u64) {
+pub fn start(
+	done_index:Arc<Mutex<Vec<String>>>, 
+	queue:Arc<Mutex<VecDeque<JsonValue>>>, 
+	offset:u64
+) {
     thread::spawn(move || {
 
 		let sports:Vec<String> 	= load_sports_glossary();
-		let games:Vec<String> 	= load_games_glossary();
+		// let games:Vec<String> 	= load_games_glossary();
 		let corp:Vec<String> 	= load_corp_glossary();
 		let science:Vec<String> = load_science_glossary();
 		let medicine:Vec<String>= load_medicine_glossary();
+		let tech:Vec<String>	= load_tech_glossary();
 
 		let mut not_finished = true;
 		while not_finished {
 		    let mut lock = queue.try_lock();
 		    if let Ok(ref mut mtx) = lock {
-		    	let item = mtx.pop_front();
+		    	let mut item = mtx.pop_front();
 			    drop(lock);
 		    	if item != None {
-			    	process_item(&item.unwrap(), &sports, &games, &corp, &medicine, &science);
+			    	process_item(
+			    		&item.unwrap(), 
+			    		&sports, 
+			    		// &games, 
+			    		&corp, 
+			    		&medicine, 
+			    		&science, 
+			    		&tech
+			    	);
 		    	}
 		    } 
 		    let _millis = time::Duration::from_millis(offset);
 			thread::sleep(_millis);
-			
 		}
     });
 }
@@ -54,10 +66,13 @@ pub fn start(queue:Arc<Mutex<VecDeque<JsonValue>>>, offset:u64) {
 fn process_item(
 	item:&JsonValue,
 	sports:&Vec<String>, 
-	games:&Vec<String>, 
+	// games:&Vec<String>, 
 	corp:&Vec<String>, 
 	medicine:&Vec<String>,
-	science:&Vec<String>) {
+	science:&Vec<String>,
+	tech:&Vec<String>) {
+    let args: Vec<String> = env::args().collect();
+    let query	 = &args[1];
 	
 	// println!("found item in queue {:?}", h1);
 	let h1 = &item["h1"].to_string();
@@ -65,14 +80,20 @@ fn process_item(
 	let sports_score = find_theme_score(&item, sports);
 	let medicine_score = find_theme_score(&item, medicine);
 	let science_score = find_theme_score(&item, science);
+	let tech_score = find_theme_score(&item, tech);
 	if corp_score > 80 || sports_score > 80 || medicine_score > 80
-	|| science_score > 80 {
-		println!("glossary news: {:?}", &h1);
-		println!("corp score {}", &corp_score);
-		println!("sports score {}", &sports_score);
-		println!("medicine score {}", &medicine_score);
-		println!("science score {}", &science_score);
+	|| science_score > 80 || tech_score > 80 {
+		if query == "debug" {
+			println!("news worthy: {:?}", &h1);
+			// println!("glossary news: {:?}", &h1);
+			// println!("corp score {}", &corp_score);
+			// println!("sports score {}", &sports_score);
+			// println!("medicine score {}", &medicine_score);
+			// println!("science score {}", &science_score);
+			// println!("tech score {}", &tech_score);
+		}
 	}
+	// return item;
 }
 
 fn find_theme_score(item:&JsonValue,theme:&Vec<String>) -> i64 {
@@ -99,14 +120,47 @@ pub fn process_text(text: &str) {
 
 fn load_sports_glossary() -> Vec<String>  {
 	let keys = [
-		"glossary/sports/sports.json"
+		"glossary/sports/sports.json",
+		"glossary/sports/nhl_teams.json",
+		"glossary/sports/nfl_teams.json",
+		"glossary/sports/nba_teams.json",
+		"glossary/sports/mlb_teams.json",
+		"glossary/sports/football/epl_teams.json",
+		"glossary/sports/football/laliga_teams.json",
+		"glossary/sports/football/serieA.json"
 	].to_vec();
 	let data = get_required_assets(keys);
 	let mut ndata: Vec<String> = Vec::new();
-	let msports = data["glossary/sports/sports.json"]["sports"].members();
-	for ms in msports {
-		ndata.push(ms.to_string());
+	for m in data["glossary/sports/sports.json"]["sports"].members() {
+		ndata.push(m.to_string());
 	}
+	for m in data["glossary/sports/nhl_teams.json"]["nhl_teams"].members() {
+		ndata.push(m["name"].to_string());
+		ndata.push(m["stadium"].to_string());
+	}
+	for m in data["glossary/sports/nfl_teams.json"]["nfl_teams"].members() {
+		ndata.push(m["name"].to_string());
+		ndata.push(m["stadium"].to_string());
+	}
+	for m in data["glossary/sports/nba_teams.json"]["nba_teams"].members() {
+		ndata.push(m["name"].to_string());
+		ndata.push(m["stadium"].to_string());
+	}
+	for m in data["glossary/sports/mlb_teams.json"]["mlb_teams"].members() {
+		ndata.push(m["name"].to_string());
+		ndata.push(m["stadium"].to_string());
+	}
+	for m in data["glossary/sports/football/epl_teams.json"]["epl_teams"].members() {
+		ndata.push(m["name"].to_string());
+		ndata.push(m["stadium"].to_string());
+		ndata.push(m["manager"].to_string());
+	}
+	for m in data["glossary/sports/football/laliga_teams.json"]["laliga_teams"].members() {
+		ndata.push(m["name"].to_string());
+		ndata.push(m["stadium"].to_string());
+		ndata.push(m["manager"].to_string());
+	}
+	
 	return ndata;
 }
 
@@ -215,6 +269,38 @@ fn load_corp_glossary() -> Vec<String> {
 	for m in data["glossary/humans/richpeople.json"]["richPeople"].members(){
 		ndata.push(m["symbol"].to_string());
 		ndata.push(m["name"].to_string());
+	}
+	return ndata;
+}
+fn load_tech_glossary() -> Vec<String> {
+	let keys = [
+		"glossary/technology/appliances.json",
+		"glossary/technology/computer_sciences.json",
+		"glossary/technology/new_technologies.json",
+		"glossary/technology/social_networking_websites.json",
+		"glossary/technology/video_hosting_websites.json",
+		"glossary/technology/photo_sharing_websites.json"
+	].to_vec();
+	let data = get_required_assets(keys);
+	let mut ndata: Vec<String> = Vec::new();
+	
+	for m in data["glossary/technology/appliances.json"]["appliances"].members() {
+		ndata.push(m.to_string());
+	}
+	for m in data["glossary/technology/computer_sciences.json"]["computer_sciences"].members() {
+		ndata.push(m.to_string());
+	}
+	for m in data["glossary/technology/new_technologies.json"]["technologies"].members() {
+		ndata.push(m.to_string());
+	}
+	for m in data["glossary/technology/social_networking_websites.json"]["socialNetworkingWebsites"].members() {
+		ndata.push(m.to_string());
+	}
+	for m in data["glossary/technology/video_hosting_websites.json"]["videoHostingWebsites"].members() {
+		ndata.push(m.to_string());
+	}
+	for m in data["glossary/technology/photo_sharing_websites.json"]["PhotoSharingWebsites"].members() {
+		ndata.push(m.to_string());
 	}
 	return ndata;
 }

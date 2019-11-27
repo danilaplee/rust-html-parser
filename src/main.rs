@@ -43,66 +43,25 @@ use nlu::glossary;
 use parser::parse_file;
 use parser::visit_dirs;
 
-fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
-    let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
-    Ok(())
-}
-
-fn add_to_set(con: &mut redis::Connection, ntype: &String, nitem: &String) -> redis::RedisResult<()> {
-    let _ : () = redis::cmd("SADD").arg(ntype).arg(nitem).query(con)?;
-    Ok(())
-}
-
-fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()> {
-    let data = redis::cmd("SMEMBERS").arg(ntype).query(con)?;
-    Ok(())
-}
-
 fn main() {
 	let bstart 									= Instant::now();
 	let ruDB:Arc<Mutex<Vec<String>>> 			= Arc::new(Mutex::new(Vec::new()));
+	let done_index:Arc<Mutex<Vec<String>>> 		= Arc::new(Mutex::new(Vec::new()));
 	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> 	= Arc::new(Mutex::new(VecDeque::new()));
-    let args: Vec<String> = env::args().collect();
+    let args:Vec<String> 						= env::args().collect();
     let query	 = &args[1];
     let filename = &args[2];
     let mut bduration = Instant::now().elapsed();
 	
-    //CLEAN DB SYNC
-    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-    let mut con = client.get_connection().unwrap();
-    let p1: () = con.publish(tgnews_nlu, "done").unwrap();
-    delete_set(&mut con, "eng".to_string());
-    delete_set(&mut con, "rus".to_string());
-    delete_set(&mut con, "news".to_string());
-    delete_set(&mut con, tgnews_nlu_reply.to_string());
-    delete_set(&mut con, tgnews_nlu_request.to_string());
-	let gls01 = glossary::start(Arc::clone(&gQueue), 11);
-	let gls02 = glossary::start(Arc::clone(&gQueue), 12);
-	let gls03 = glossary::start(Arc::clone(&gQueue), 13);
-	let gls04 = glossary::start(Arc::clone(&gQueue), 14);
-	let gls05 = glossary::start(Arc::clone(&gQueue), 15);
-	let gls06 = glossary::start(Arc::clone(&gQueue), 16);
-	let gls07 = glossary::start(Arc::clone(&gQueue), 17);
-	let gls08 = glossary::start(Arc::clone(&gQueue), 18);
-	let gls09 = glossary::start(Arc::clone(&gQueue), 19);
-	let gls10 = glossary::start(Arc::clone(&gQueue), 5);
-	let gls11 = glossary::start(Arc::clone(&gQueue), 3);
-	let gls12 = glossary::start(Arc::clone(&gQueue), 4);
-	let gls13 = glossary::start(Arc::clone(&gQueue), 6);
-	let gls14 = glossary::start(Arc::clone(&gQueue), 7);
-	let gls15 = glossary::start(Arc::clone(&gQueue), 8);
-	let gls16 = glossary::start(Arc::clone(&gQueue), 9);
-
     //SETUP DEBUG
 	if query == "debug" {
 	    println!("=============== RUNNING TGNEWS v0.4.2 ===============");
 	    println!("=============== START TIME {} ===============", Utc::now());
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
-	    block_on(run_nlu_service(&mut con, &query));
+	    run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue));
+	    run_nlu_service();
 	    println!("python setup done");
-	    run_nlu_listener();
-	    println!("listener setup done");
 	    bduration = bstart.elapsed();
 	    println!("total boot time: {:?}", bduration);
 	}
@@ -115,8 +74,8 @@ fn main() {
 	//SETUP NEWS
 	if query == "news" {
 		print_news_start();
-	    block_on(run_nlu_service(&mut con, &query));
-	    run_nlu_listener();
+		run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue));
+	    run_nlu_service();
 	}
     
 
@@ -136,7 +95,7 @@ fn main() {
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
-		block_on(wait_for_nlu_completion(&mut con, Arc::clone(&gQueue)));
+		block_on(wait_for_nlu_completion(Arc::clone(&gQueue)));
 		//COUNT PERFORMANCE
 		let end_time = Utc::now();
 		let duration = start.elapsed();
@@ -147,10 +106,41 @@ fn main() {
 	}
 	//SETUP NEWS
 	if query == "news" {
-		block_on(wait_for_nlu_completion(&mut con, Arc::clone(&gQueue)));
+		block_on(wait_for_nlu_completion(Arc::clone(&gQueue)));
 		print_news_end();
 	}
-    let p2:() = con.publish(tgnews_nlu, "done").unwrap();
+}
+fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {
+    let _ : () = redis::cmd("DEL").arg(ntype).query(con)?;
+    Ok(())
+}
 
+fn add_to_set(con: &mut redis::Connection, ntype: &String, nitem: &String) -> redis::RedisResult<()> {
+    let _ : () = redis::cmd("SADD").arg(ntype).arg(nitem).query(con)?;
+    Ok(())
+}
+
+fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()> {
+    let data = redis::cmd("SMEMBERS").arg(ntype).query(con)?;
+    Ok(())
+}
+
+fn run_glossaries(done_index:Arc<Mutex<Vec<String>>>, gQueue:Arc<Mutex<VecDeque<JsonValue>>>) {
+	let gls01 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 11);
+	let gls02 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 12);
+	let gls03 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 13);
+	let gls04 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 14);
+	let gls05 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 15);
+	let gls06 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 16);
+	let gls07 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 17);
+	let gls08 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 18);
+	let gls09 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 19);
+	let gls10 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 5);
+	let gls11 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 3);
+	let gls12 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 4);
+	let gls13 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 6);
+	let gls14 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 7);
+	let gls15 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 8);
+	let gls16 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 9);
 }
 

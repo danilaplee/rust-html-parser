@@ -148,8 +148,8 @@ pub fn parse_file(entry: &DirEntry,
 	    	"lang" => key
 	    };
 
-	    add_to_set(&mut con, &key.to_string(), &pstr)?;
-	    con.publish(tgnews_nlu, &lang_data.dump())?;
+	    con.lpush(tgnews_nlu, &lang_data.dump())?;
+
 	    let mut lock = queue.try_lock();
 	    if let Ok(ref mut mtx) = lock {
 	        // println!("total queue length: {:?}", mtx.len());

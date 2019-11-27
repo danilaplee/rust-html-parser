@@ -14,6 +14,7 @@ use super::tgnews_nlu_start;
 use super::tgnews_nlu_end;
 use super::tgnews_nlu_reply_timeout;
 use super::add_to_set;
+use super::delete_set;
 use std::time;
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
@@ -32,41 +33,67 @@ where
     }
 }
 
-pub async fn run_nlu_service(con: &mut redis::Connection, query: &str) -> Result<(), Box<dyn std::error::Error + 'static>>   {
+pub fn run_nlu_service()  {
+	thread::spawn(move || {
+		let args:Vec<String> = env::args().collect();
+	    let query	 = &args[1];
 
-	let mut pubsub = con.as_pubsub();
-    let f = absolute_path(PathBuf::from("./python/nlu_service.py")).unwrap().into_os_string();
-	pubsub.subscribe(tgnews_nlu_start);
-	if query == "debug" {
-		let python_process = Command::new("python3")
-		.arg(f)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-		.spawn()
-		.expect("failed to execute process");
-		println!("subscribed to tgnews_nlu");
-	}
-	else {
-		let python_process = Command::new("python3")
-		.arg(f)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-		.spawn()
-		.expect("failed to execute process");
-	}
+	    //CLEAN DB SYNC
+	    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+	    let mut con = client.get_connection().unwrap();
+	    let p1: () = con.publish(tgnews_nlu, "done").unwrap();
+	    delete_set(&mut con, "news".to_string());
+	    delete_set(&mut con, tgnews_nlu.to_string());
+	    delete_set(&mut con, tgnews_nlu_reply.to_string());
+	    delete_set(&mut con, tgnews_nlu_request.to_string());
 
-	loop {
-	    let msg = pubsub.get_message()?;
-	    let payload : String = msg.get_payload()?;
-	    if payload == "listener_started" {
-	    	pubsub.unsubscribe(tgnews_nlu_start)?;
-	    	return Ok(());
-	    }
-	}
+		let mut pubsub = con.as_pubsub();
+	    let f = absolute_path(PathBuf::from("./python/nlu_service.py")).unwrap().into_os_string();
+		pubsub.subscribe(tgnews_nlu_start);
+		if query == "debug" {
+			let python_process1 = Command::new("python3")
+			.arg(&f)
+	        // .stdout(Stdio::null())
+	        // .stderr(Stdio::null())
+			.spawn()
+			.expect("failed to execute process");
+			println!("subscribed to tgnews_nlu");
+
+			let python_process2 = Command::new("python3")
+			.arg(&f)
+	        // .stdout(Stdio::null())
+	        // .stderr(Stdio::null())
+			.spawn()
+			.expect("failed to execute process");
+			println!("subscribed to tgnews_nlu");
+		}
+		else {
+			let python_process = Command::new("python3")
+			.arg(f)
+	        .stdout(Stdio::null())
+	        .stderr(Stdio::null())
+			.spawn()
+			.expect("failed to execute process");
+		}
+
+		loop {
+		    let msg = pubsub.get_message().unwrap();
+		    let payload : String = msg.get_payload().unwrap();
+		    if payload == "listener_started" {
+		    	pubsub.unsubscribe(tgnews_nlu_start).unwrap();
+			    run_nlu_listener();
+		    	// return Ok(());
+		    }
+		}
+	});
+	// Ok(());
+	return;
 }
 
-pub async fn wait_for_nlu_completion(con: &mut redis::Connection, queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Result<(), Box<dyn std::error::Error + 'static>>   {
+pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 
+    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+    let mut con = client.get_connection().unwrap();
 	let mut pubsub = con.as_pubsub();
 	let mut done = false;
 	pubsub.subscribe(tgnews_nlu_end);
@@ -90,6 +117,8 @@ pub async fn wait_for_nlu_completion(con: &mut redis::Connection, queue:Arc<Mute
 		    if payload == "done" {
 		    	done = true;
 		    	pubsub.unsubscribe(tgnews_nlu_end)?;
+			    let mut con2 = client.get_connection().unwrap();
+			    let p2:() = con2.publish(tgnews_nlu, "done").unwrap();
 		    }
 	    }
 	}
