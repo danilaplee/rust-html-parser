@@ -53,16 +53,16 @@ pub fn run_nlu_service()  {
 		if query == "debug" {
 			let python_process1 = Command::new("python3")
 			.arg(&f)
-	        // .stdout(Stdio::null())
-	        // .stderr(Stdio::null())
+	        .stdout(Stdio::null())
+	        .stderr(Stdio::null())
 			.spawn()
 			.expect("failed to execute process");
 			println!("subscribed to tgnews_nlu");
 
 			let python_process2 = Command::new("python3")
 			.arg(&f)
-	        // .stdout(Stdio::null())
-	        // .stderr(Stdio::null())
+	        .stdout(Stdio::null())
+	        .stderr(Stdio::null())
 			.spawn()
 			.expect("failed to execute process");
 			println!("subscribed to tgnews_nlu");
