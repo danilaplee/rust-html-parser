@@ -1,5 +1,6 @@
 extern crate redis;
 use json::JsonValue;
+use json::object;
 use std::fs::{self, DirEntry, File};
 use std::path::{PathBuf, Path};
 use std::env;
@@ -17,6 +18,9 @@ use packer::Packer;
 #[packer(source = "glossary")]
 struct Assets;
 
+use super::librarian;
+
+
 // Society (includes Politics, Elections, Legislation, Incidents, Crime)
 // Economy (includes Markets, Finance, Business)
 // Technology (includes Gadgets, Auto, Apps, Internet services)
@@ -28,18 +32,55 @@ struct Assets;
 pub fn start(
 	done_index:Arc<Mutex<Vec<String>>>, 
 	queue:Arc<Mutex<VecDeque<JsonValue>>>, 
+	db:Arc<Mutex<JsonValue>>,
 	offset:u64
 ) {
     thread::spawn(move || {
+	    let args: Vec<String> = env::args().collect();
+	    let query	 = &args[1];
 
-		let sports:Vec<String> 	= load_sports_glossary();
-		let etv:Vec<String> 	= load_etv_glossary();
-		let corp:Vec<String> 	= load_corp_glossary();
-		let science:Vec<String> = load_science_glossary();
-		let medicine:Vec<String>= load_medicine_glossary();
-		let tech:Vec<String>	= load_tech_glossary();
-		let gov:Vec<String> 	= load_gov_glossary();
-
+		let sports:Vec<String> 	= librarian::load_sports_glossary();
+		let etv:Vec<String> 	= librarian::load_etv_glossary();
+		let corp:Vec<String> 	= librarian::load_corp_glossary();
+		let science:Vec<String> = librarian::load_science_glossary();
+		let medicine:Vec<String>= librarian::load_medicine_glossary();
+		let tech:Vec<String>	= librarian::load_tech_glossary();
+		let gov:Vec<String> 	= librarian::load_gov_glossary();
+		let music:Vec<String> 	= librarian::load_music_glossary();
+		let book:Vec<String> 	= librarian::load_book_glossary();
+		let art:Vec<String> 	= librarian::load_art_glossary();
+		let terror:Vec<String> 	= librarian::load_terror_glossary();
+		let ops:Vec<String> 	= librarian::load_ops_glossary();
+		let games:Vec<String> 	= librarian::load_games_glossary();
+		if query == "debug" {
+			println!("library loaded: {:?}", 
+				&corp.len()
+				+&etv.len()
+				+&sports.len()
+				+&science.len()
+				+&medicine.len()
+				+&tech.len()
+				+&gov.len()
+				+&music.len()
+				+&book.len()
+				+&art.len()
+				+&terror.len()
+				+&ops.len()
+				+&games.len()
+			);
+		}
+		// println!("sports glossary length: {:?}", sports.len());
+		// println!("etv glossary length: {:?}", etv.len());
+		// println!("corp glossary length: {:?}", corp.len());
+		// println!("science glossary length: {:?}", science.len());
+		// println!("medicine glossary length: {:?}", medicine.len());
+		// println!("tech glossary length: {:?}", tech.len());
+		// println!("gov glossary length: {:?}", gov.len());
+		// println!("music glossary length: {:?}", music.len());
+		// println!("book glossary length: {:?}", book.len());
+		// println!("art glossary length: {:?}", art.len());
+		// println!("ops glossary length: {:?}", ops.len());
+		// println!("terror glossary length: {:?}", terror.len());
 		let mut not_finished = true;
 		while not_finished {
 		    let mut lock = queue.try_lock();
@@ -47,16 +88,36 @@ pub fn start(
 		    	let mut item = mtx.pop_front();
 			    drop(lock);
 		    	if item != None {
-			    	process_item(
-			    		&item.unwrap(), 
+			    	let mut nitem = item.unwrap();
+			    	let scores = process_item(
+			    		&nitem, 
 			    		&sports, 
 			    		&corp, 
 			    		&medicine, 
 			    		&science, 
 			    		&tech,
 			    		&etv,
-			    		&gov
+			    		&gov,
+			    		&music,
+			    		&art,
+			    		&book,
+			    		&terror,
+			    		&ops,
+			    		&games
 			    	);
+				    let mut lock2 = db.try_lock();
+				    if let Ok(ref mut mtx2) = lock2 {
+				    	// println!("mtx 2: {:?}", mtx2);
+				    	let id = &nitem["path"].to_string();
+				    	if mtx2[id].is_null() {
+					    	nitem["scores"] = scores;
+					    	mtx2[id] = nitem;
+				    	}
+				    	else {
+					    	mtx2[id]["scores"] = scores;
+				    	}
+				    }
+			    	drop(lock2);
 		    	}
 		    } 
 		    let _millis = time::Duration::from_millis(offset);
@@ -73,37 +134,71 @@ fn process_item(
 	science:&Vec<String>,
 	tech:&Vec<String>,
 	etv:&Vec<String>,
-	gov:&Vec<String>
-) {
+	gov:&Vec<String>,
+	music:&Vec<String>,
+	art:&Vec<String>,
+	book:&Vec<String>,
+	terror:&Vec<String>,
+	ops:&Vec<String>,
+	games:&Vec<String>
+) -> json::JsonValue {
     let args: Vec<String> = env::args().collect();
     let query	 = &args[1];
 	
-	// println!("found item in queue {:?}", h1);
 	let h1 				= &item["h1"].to_string();
-	let corp_score 		= find_theme_score(&item, corp);
-	let sports_score 	= find_theme_score(&item, sports);
-	let medicine_score 	= find_theme_score(&item, medicine);
-	let science_score 	= find_theme_score(&item, science);
-	let tech_score 		= find_theme_score(&item, tech);
-	let etv_score 		= find_theme_score(&item, etv);
-	let gov_score 		= find_theme_score(&item, gov);
-
+	let corp_score 		= find_theme_score(&item, corp, "corp");
+	let sports_score 	= find_theme_score(&item, sports, "sports");
+	let medicine_score 	= find_theme_score(&item, medicine, "medicine");
+	let science_score 	= find_theme_score(&item, science, "science");
+	let tech_score 		= find_theme_score(&item, tech, "tech");
+	let etv_score 		= find_theme_score(&item, etv, "etv");
+	let gov_score 		= find_theme_score(&item, gov, "gov");
+	let music_score 	= find_theme_score(&item, music, "music");
+	let art_score 		= find_theme_score(&item, art, "art");
+	let book_score 		= find_theme_score(&item, book, "book");
+	let terror_score 	= find_theme_score(&item, terror, "terror");
+	let ops_score 		= find_theme_score(&item, ops, "ops");
+	let games_score 	= find_theme_score(&item, games, "games");
 	if corp_score > 80 || sports_score > 80 || medicine_score > 80
-	|| science_score > 80 || tech_score > 80 || etv_score > 80 || gov_score > 80 {
+	|| science_score > 80 || tech_score > 80 || etv_score > 80 || gov_score > 80
+	|| music_score > 80 || art_score > 80 || book_score > 200 
+	|| ops_score > 500 || terror_score > 100 ||  games_score > 80 {
 		if query == "debug" {
 			println!("news worthy: {:?}", &h1);
-			// println!("glossary news: {:?}", &h1);
-			// println!("corp score {}", &corp_score);
-			// println!("sports score {}", &sports_score);
-			// println!("medicine score {}", &medicine_score);
-			// println!("science score {}", &science_score);
-			// println!("tech score {}", &tech_score);
+			println!("corp score {}", &corp_score);
+			println!("sports score {}", &sports_score);
+			println!("medicine score {}", &medicine_score);
+			println!("science score {}", &science_score);
+			println!("tech score {}", &tech_score);
+			println!("etv score {}", &etv_score);
+			println!("gov score {}", &gov_score);
+			println!("book score {}", &book_score);
+			println!("music score {}", &music_score);
+			println!("art score {}", &art_score);
+			println!("ops score {}", &ops_score);
+			println!("terror score {}", &terror_score);
+			println!("games score {}", &games_score);
 		}
 	}
+	return object!{
+		"corp_score" => corp_score,
+		"sports_score" => sports_score,
+		"medicine_score" => medicine_score,
+		"science_score" => science_score,
+		"tech_score" => tech_score,
+		"etv_score" => etv_score,
+		"gov_score" => gov_score,
+		"music_score" => music_score,
+		"art_score" => art_score,
+		"book_score" => book_score,
+		"terror_score" => terror_score,
+		"ops_score" => ops_score,
+		"games_score" => games_score
+	};
 	// return item;
 }
 
-fn find_theme_score(item:&JsonValue,theme:&Vec<String>) -> i64 {
+fn find_theme_score(item:&JsonValue,theme:&Vec<String>, tname:&str) -> i64 {
 
 	let mut _score = 0;
 	let h1 = &item["h1"].to_string();
@@ -111,9 +206,15 @@ fn find_theme_score(item:&JsonValue,theme:&Vec<String>) -> i64 {
 		let sc = fuzzy_indices(&h1, &c);
 		if sc != None {
 			let (score, indices) = sc.unwrap();
-			// println!("score for {} in {}:{:?}",&c, &h1, score );
-			if score > 0 {
-				_score += score;
+			if tname == "games" {
+				 score > c.len() as i64 {
+					_score += score;
+				}
+			} else {
+
+				if score > (c.len()/2) as i64 {
+					_score += score;
+				}
 			}
 		}
 	}
@@ -123,296 +224,4 @@ fn find_theme_score(item:&JsonValue,theme:&Vec<String>) -> i64 {
 pub fn process_text(text: &str) {
 	let (score, indices) = fuzzy_indices("axbycz", "abc").unwrap();
 	assert_eq!(indices, [0, 2, 4]);
-}
-
-fn load_sports_glossary() -> Vec<String>  {
-	let keys = [
-		"glossary/sports/sports.json",
-		"glossary/sports/nhl_teams.json",
-		"glossary/sports/nfl_teams.json",
-		"glossary/sports/nba_teams.json",
-		"glossary/sports/mlb_teams.json",
-		"glossary/sports/football/epl_teams.json",
-		"glossary/sports/football/laliga_teams.json",
-		"glossary/sports/football/serieA.json"
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-	for m in data["glossary/sports/sports.json"]["sports"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/sports/nhl_teams.json"]["nhl_teams"].members() {
-		ndata.push(m["name"].to_string());
-		ndata.push(m["stadium"].to_string());
-	}
-	for m in data["glossary/sports/nfl_teams.json"]["nfl_teams"].members() {
-		ndata.push(m["name"].to_string());
-		ndata.push(m["stadium"].to_string());
-	}
-	for m in data["glossary/sports/nba_teams.json"]["nba_teams"].members() {
-		ndata.push(m["name"].to_string());
-		ndata.push(m["stadium"].to_string());
-	}
-	for m in data["glossary/sports/mlb_teams.json"]["mlb_teams"].members() {
-		ndata.push(m["name"].to_string());
-		ndata.push(m["stadium"].to_string());
-	}
-	for m in data["glossary/sports/football/epl_teams.json"]["epl_teams"].members() {
-		ndata.push(m["name"].to_string());
-		ndata.push(m["stadium"].to_string());
-		ndata.push(m["manager"].to_string());
-	}
-	for m in data["glossary/sports/football/laliga_teams.json"]["laliga_teams"].members() {
-		ndata.push(m["name"].to_string());
-		ndata.push(m["stadium"].to_string());
-		ndata.push(m["manager"].to_string());
-	}
-	
-	return ndata;
-}
-
-fn load_science_glossary() -> Vec<String> {
-	let keys = [
-		"glossary/science/planets.json",
-		"glossary/science/minor_planets.json",
-		"glossary/science/elements.json",
-		"glossary/science/weather_conditions.json",
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-	let mweather = data["glossary/science/weather_conditions.json"]["conditions"].members();
-	for m in mweather {
-		ndata.push(m.to_string());
-	}
-	let mmplanets = data["glossary/science/minor_planets.json"]["minor_planets"].members();
-	for m in mmplanets {
-		ndata.push(m.to_string());
-	}
-	let mplanets = data["glossary/science/planets.json"]["planets"].members();
-	for m in mplanets {
-		ndata.push(m["name"].to_string());
-	}
-	let melements = data["glossary/science/elements.json"]["elements"].members();
-	for m in melements {
-		ndata.push(m["name"].to_string());
-		ndata.push(m["discoverer"].to_string());
-	}
-	return ndata;
-}
-
-fn load_medicine_glossary() -> Vec<String> {
-	let keys = [
-		"glossary/medicine/drugNameStems.json",
-		"glossary/medicine/cancer.json",
-		"glossary/medicine/hospitals.json",
-		"glossary/medicine/infectious_diseases.json",
-		"glossary/medicine/diagnoses.json",
-		"glossary/medicine/symptoms.json",
-		"glossary/humans/bodyParts.json"
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-	for ms in data["glossary/medicine/drugNameStems.json"]["stems"].members() {
-		ndata.push(ms.to_string());
-	}
-	for ms in data["glossary/medicine/cancer.json"]["cancers"].members() {
-		ndata.push(ms.to_string());
-	}
-	for ms in data["glossary/medicine/hospitals.json"]["hospitals"].members() {
-		ndata.push(ms.to_string());
-	}
-	for ms in data["glossary/medicine/symptoms.json"]["diagnoses"].members() {
-		ndata.push(ms["desc"].to_string());
-	}
-	for ms in data["glossary/medicine/symptoms.json"]["symptoms"].members() {
-		ndata.push(ms.to_string());
-	}
-	for ms in data["glossary/medicine/infectious_diseases.json"]["diseases"].members() {
-		ndata.push(ms.to_string());
-	}
-	for ms in data["glossary/humans/bodyParts.json"]["bodyParts"].members() {
-		ndata.push(ms.to_string());
-	}
-	for ms in data["glossary/medicine/diseases.json"]["diseases"].members() {
-		for nn in ms.members() {
-			ndata.push(nn.to_string())
-		}
-	}
-	return ndata;
-}
-
-fn load_games_glossary() -> Vec<String> {
-	let keys = [
-		"glossary/games/steam.json"
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-	let msteam = data["glossary/games/steam.json"]["applist"]["apps"].members();
-	for ms in msteam {
-		ndata.push(ms["name"].to_string());
-	}
-	return ndata;
-}
-
-fn load_corp_glossary() -> Vec<String> {
-	let keys = [
-		"glossary/corporations/fortune500.json",
-		"glossary/corporations/nasdaq.json",
-		"glossary/corporations/newspapers.json",
-		"glossary/corporations/dija.json",
-		"glossary/humans/richpeople.json"
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-	for m in data["glossary/corporations/fortune500.json"]["companies"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/corporations/newspapers.json"]["newspapers"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/corporations/nasdaq.json"]["corporations"].members() {
-		ndata.push(m["symbol"].to_string());
-		ndata.push(m["name"].to_string());
-	}
-	for m in data["glossary/corporations/dija.json"]["corporations"].members() {
-		ndata.push(m["name"].to_string());
-	}
-	for m in data["glossary/humans/richpeople.json"]["richPeople"].members(){
-		ndata.push(m["symbol"].to_string());
-		ndata.push(m["name"].to_string());
-	}
-	return ndata;
-}
-fn load_tech_glossary() -> Vec<String> {
-	let keys = [
-		"glossary/technology/appliances.json",
-		"glossary/technology/computer_sciences.json",
-		"glossary/technology/new_technologies.json",
-		"glossary/technology/social_networking_websites.json",
-		"glossary/technology/video_hosting_websites.json",
-		"glossary/technology/photo_sharing_websites.json"
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-
-	for m in data["glossary/technology/appliances.json"]["appliances"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/technology/computer_sciences.json"]["computer_sciences"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/technology/new_technologies.json"]["technologies"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/technology/social_networking_websites.json"]["socialNetworkingWebsites"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/technology/video_hosting_websites.json"]["videoHostingWebsites"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/technology/photo_sharing_websites.json"]["PhotoSharingWebsites"].members() {
-		ndata.push(m.to_string());
-	}
-	return ndata;
-}
-fn load_etv_glossary() -> Vec<String> {
-	let keys = [
-		"glossary/film-tv/tv_shows.json",
-		"glossary/books/bestsellers.json",
-		"glossary/art/isms.json",
-		"glossary/film-tv/popular-movies.json",
-		"glossary/music/female_classical_guitarists.json",
-		"glossary/music/instruments.json",
-		"glossary/music/rock_hall_of_fame.json",
-		"glossary/humans/celebrities.json",
-		"glossary/humans/authors.json"
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-
-	for m in data["glossary/film-tv/tv_shows.json"]["tv_shows"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/books/bestsellers.json"]["books"].members() {
-		ndata.push(m["title"].to_string());
-	}
-	for m in data["glossary/art/isms.json"]["isms"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/film-tv/popular-movies.json"]["popular-movies"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/music/female_classical_guitarists.json"]["data"].members() {
-		ndata.push(m["name"].to_string());
-	}
-	for m in data["glossary/music/instruments.json"]["instruments"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/music/rock_hall_of_fame.json"]["artists"].members() {
-		ndata.push(m["name"].to_string());
-	}
-	for m in data["glossary/humans/celebrities.json"]["celebrities"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/humans/celebrities.json"]["authors"].members() {
-		ndata.push(m.to_string());
-	}
-	return ndata;
-}
-
-fn load_gov_glossary() -> Vec<String> {
-	let keys = [
-		"glossary/governments/mass-surveillance-project-names.json",
-		"glossary/governments/nsa_projects.json",
-		"glossary/governments/uk_political_parties.json",
-		"glossary/governments/us_federal_agencies.json",
-		"glossary/governments/us_mil_operations.json",
-		"glossary/humans/us_presidents.json"
-	].to_vec();
-	let data = get_required_assets(keys);
-	let mut ndata: Vec<String> = Vec::new();
-
-	for m in data["glossary/governments/us_mil_operations.json"]["operations"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/governments/us_federal_agencies.json"]["agencies"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/governments/uk_political_parties.json"]["parties"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/governments/nsa_projects.json"]["codenames"].members() {
-		ndata.push(m.to_string());
-	}
-	for m in data["glossary/governments/mass-surveillance-project-names.json"]["projects"].members() {
-		ndata.push(m["name"].to_string());
-	}
-	for m in data["glossary/humans/us_presidents.json"]["objects"].members() {
-		ndata.push(m["person"]["name"].to_string());
-	}
-	return ndata;
-}
-
-fn get_required_assets(keys:Vec<&str>) -> json::JsonValue {
-	let files = Assets::list();
-	let mut data = json::JsonValue::new_object();
-	for file in files {
-		let required = keys.contains(&file);
-		let raw = Assets::get_str(&file);
-		
-		if raw == None || !required {
-			continue;
-		}
-	    let jdata = json::parse(raw.unwrap());
-		match jdata {
-			Ok(jresult) => {
-				data[file] = jresult;
-			},
-			Err(e) => {
-
-			}
-		}
-	}
-	return data;
-
 }

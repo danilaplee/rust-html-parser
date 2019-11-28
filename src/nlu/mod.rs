@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 
 pub mod glossary;
+pub mod librarian;
 
 pub fn absolute_path<P>(path: P) -> io::Result<PathBuf>
 where
@@ -59,13 +60,13 @@ pub fn run_nlu_service()  {
 			.expect("failed to execute process");
 			println!("subscribed to tgnews_nlu");
 
-			let python_process2 = Command::new("python3")
-			.arg(&f)
-	        .stdout(Stdio::null())
-	        .stderr(Stdio::null())
-			.spawn()
-			.expect("failed to execute process");
-			println!("subscribed to tgnews_nlu");
+			// let python_process2 = Command::new("python3")
+			// .arg(&f)
+	  //       // .stdout(Stdio::null())
+	  //       // .stderr(Stdio::null())
+			// .spawn()
+			// .expect("failed to execute process");
+			// println!("subscribed to tgnews_nlu");
 		}
 		else {
 			let python_process = Command::new("python3")
@@ -86,11 +87,10 @@ pub fn run_nlu_service()  {
 		    }
 		}
 	});
-	// Ok(());
 	return;
 }
 
-pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>) -> Result<(), Box<dyn std::error::Error + 'static>>   {
+pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>, no_python:bool) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
     let mut con = client.get_connection().unwrap();
@@ -98,7 +98,7 @@ pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>) -> R
 	let mut done = false;
 	pubsub.subscribe(tgnews_nlu_end);
 	loop {
-	    if done {
+	    if done || no_python {
 		    let mut lock = queue.try_lock();
 		    if let Ok(ref mut mtx) = lock {
 		        println!("total queue length: {:?}", mtx.len());

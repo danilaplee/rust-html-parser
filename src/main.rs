@@ -4,6 +4,7 @@ extern crate futures;
 extern crate chrono;
 extern crate redis;
 extern crate json;
+extern crate clap;
 
 use chrono::{Utc};
 use std::time::{Instant};
@@ -18,6 +19,7 @@ use std::collections::VecDeque;
 use json::JsonValue;
 use std::sync::mpsc::channel;
 use std::thread;
+use clap::{App, Arg};
 
 mod printer;
 mod nlu;
@@ -45,23 +47,41 @@ use parser::visit_dirs;
 
 fn main() {
 	let bstart 									= Instant::now();
-	let ruDB:Arc<Mutex<Vec<String>>> 			= Arc::new(Mutex::new(Vec::new()));
+	let ru_db:Arc<Mutex<Vec<String>>> 			= Arc::new(Mutex::new(Vec::new()));
 	let done_index:Arc<Mutex<Vec<String>>> 		= Arc::new(Mutex::new(Vec::new()));
+	let category_db:Arc<Mutex<JsonValue>> 		= Arc::new(Mutex::new(json::JsonValue::new_object()));
 	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> 	= Arc::new(Mutex::new(VecDeque::new()));
     let args:Vec<String> 						= env::args().collect();
-    let query	 = &args[1];
-    let filename = &args[2];
-    let mut bduration = Instant::now().elapsed();
-	
+    let query	 								= &args[1];
+    let filename 								= &args[2];
+    let mut bduration 							= Instant::now().elapsed();
+    let mut disable_python = true;
+    let matches = App::new("TGNEWS")
+        .args(&[
+            Arg::with_name("query").index(1).help("options are: debug, news, categories, threads, top"),
+            Arg::with_name("filename").index(2).help("directory path: ./DataClusteringSample0817/"),
+            Arg::with_name("python")
+                .help("enable python neural nets with --python")
+                .long("python"),
+            Arg::with_name("redis")
+                .help("enable redis cache with --redis")
+                .long("redis")
+        ])
+        .get_matches();
+	if matches.is_present("python") {
+        disable_python = false;
+    } 
     //SETUP DEBUG
 	if query == "debug" {
-	    println!("=============== RUNNING TGNEWS v0.4.2 ===============");
+	    println!("=============== RUNNING TGNEWS v0.5.1 ===============");
 	    println!("=============== START TIME {} ===============", Utc::now());
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
-	    run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue));
-	    run_nlu_service();
-	    println!("python setup done");
+	    if disable_python == false {
+		    run_nlu_service();
+	    }
+	    run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&category_db), disable_python);
+	    println!("python && glosary setup done");
 	    bduration = bstart.elapsed();
 	    println!("total boot time: {:?}", bduration);
 	}
@@ -74,19 +94,21 @@ fn main() {
 	//SETUP NEWS
 	if query == "news" {
 		print_news_start();
-		run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue));
-	    run_nlu_service();
+		run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&category_db), disable_python);
+	    if disable_python == false {
+		    run_nlu_service();
+	    }
 	}
     
 
     //START DIRS
 	let start = Instant::now();
     let path = Path::new(filename);
-    let result = visit_dirs(path, Arc::clone(&gQueue), Arc::clone(&ruDB));
+    let result = visit_dirs(path, Arc::clone(&gQueue), Arc::clone(&ru_db));
 	
 
 	if query == "languages" {
-		print_languages_end(Arc::clone(&ruDB));
+		print_languages_end(Arc::clone(&ru_db));
 		return;
 	}
 
@@ -95,7 +117,7 @@ fn main() {
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
-		block_on(wait_for_nlu_completion(Arc::clone(&gQueue)));
+		block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
 		//COUNT PERFORMANCE
 		let end_time = Utc::now();
 		let duration = start.elapsed();
@@ -103,10 +125,15 @@ fn main() {
 	    println!("=============== END TIME {} ===============", end_time);
 	    println!("=============== DURATION {:?} ===============", duration);
 	    println!("=============== BDURATION {:?} ===============", bduration);
+	    let mut lock1 = category_db.try_lock();
+	    if let Ok(ref mut mtx) = lock1 {
+		    // println!("all news data from glossary: {}", mtx.pretty(2));
+		    println!("total news data from glossary: {:?}", mtx.len());
+		}
 	}
 	//SETUP NEWS
 	if query == "news" {
-		block_on(wait_for_nlu_completion(Arc::clone(&gQueue)));
+		block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
 		print_news_end();
 	}
 }
@@ -125,22 +152,40 @@ fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()
     Ok(())
 }
 
-fn run_glossaries(done_index:Arc<Mutex<Vec<String>>>, gQueue:Arc<Mutex<VecDeque<JsonValue>>>) {
-	let gls01 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 11);
-	let gls02 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 12);
-	let gls03 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 13);
-	let gls04 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 14);
-	let gls05 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 15);
-	let gls06 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 16);
-	let gls07 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 17);
-	let gls08 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 18);
-	let gls09 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 19);
-	let gls10 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 5);
-	let gls11 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 3);
-	let gls12 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 4);
-	let gls13 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 6);
-	let gls14 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 7);
-	let gls15 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 8);
-	let gls16 = glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), 9);
+fn run_glossaries(
+	done_index:Arc<Mutex<Vec<String>>>, 
+	gQueue:Arc<Mutex<VecDeque<JsonValue>>>,
+	db:Arc<Mutex<JsonValue>>,
+	disable_python:bool
+) {
+	if(!disable_python) {
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 12);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 13);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 14);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 15);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 16);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 21);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 22);
+	}
+	else {
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 12);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 13);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 14);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 15);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 16);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 21);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 22);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 23);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 33);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 37);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 61);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 53);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 27);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 34);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 88);
+
+	}
 }
 

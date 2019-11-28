@@ -42,7 +42,7 @@ use super::add_to_set;
 pub fn visit_dirs(
 	dir: &Path, 
 	queue:Arc<Mutex<VecDeque<JsonValue>>>,
-	ruDB:Arc<Mutex<Vec<String>>>) -> io::Result<()> {
+	ru_db:Arc<Mutex<Vec<String>>>) -> io::Result<()> {
 
 
     let mut ittr = 0;
@@ -53,7 +53,7 @@ pub fn visit_dirs(
 
             let path = entry.path();
 		    let q = Arc::clone(&queue);
-		    let rus = Arc::clone(&ruDB);
+		    let rus = Arc::clone(&ru_db);
 
             if path.is_dir() {
             	visit_dirs(&path, q, rus);
@@ -93,7 +93,7 @@ pub fn visit_dirs(
 
 pub fn parse_file(entry: &DirEntry, 
 	queue:Arc<Mutex<VecDeque<JsonValue>>>,
-	ruDB:Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn std::error::Error + 'static>> {
+	ru_db:Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
@@ -159,7 +159,7 @@ pub fn parse_file(entry: &DirEntry,
 	    }
 	    drop(lock);
 	    if key == "rus" {
-		    let mut lock2 = ruDB.try_lock();
+		    let mut lock2 = ru_db.try_lock();
 		    if let Ok(ref mut mtx2) = lock2 {
 		        // println!("total queue length: {:?}", mtx.len());
 		       	mtx2.push(pstr);
