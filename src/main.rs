@@ -185,6 +185,22 @@ fn run_glossaries(
 		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 27);
 		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 34);
 		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 88);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 23);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 55);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 51);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 52);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 54);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 56);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 58);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 88);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 24);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 26);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 27);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 29);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 30);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 61);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 62);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 63);
 
 	}
 }

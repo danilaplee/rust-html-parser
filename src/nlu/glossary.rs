@@ -200,6 +200,8 @@ fn process_item(
 
 fn find_theme_score(item:&JsonValue,theme:&Vec<String>, tname:&str) -> i64 {
 
+	let args: Vec<String> = env::args().collect();
+	let query	 = &args[1];
 	let mut _score = 0;
 	let h1 = &item["h1"].to_string();
 	// let cc:Vec<&str> = Vec::new()
@@ -208,7 +210,9 @@ fn find_theme_score(item:&JsonValue,theme:&Vec<String>, tname:&str) -> i64 {
 		if tname == "games" {
 			if h1.to_lowercase().contains(c)  {
 				_score += 1;
-				println!("found game: {:?}", c);
+				if query == "debug" {
+					// println!("found game: {:?}", c);
+				}
 			}
 		} else {
 			let sc = fuzzy_indices(&h1, &c);

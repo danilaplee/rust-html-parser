@@ -43,8 +43,6 @@ pub fn visit_dirs(
 	dir: &Path, 
 	queue:Arc<Mutex<VecDeque<JsonValue>>>,
 	ru_db:Arc<Mutex<Vec<String>>>) -> io::Result<()> {
-
-
     let mut ittr = 0;
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
@@ -56,34 +54,17 @@ pub fn visit_dirs(
 		    let rus = Arc::clone(&ru_db);
 
             if path.is_dir() {
-            	visit_dirs(&path, q, rus);
-            } else {
 			    thread::spawn(move || {
-				    let args: Vec<String> = env::args().collect();
-				    let query = &args[1];
-			    	
-			    	if query == "debug" {
-			    		// println!("spawned a new thread {} for dir", ittr);
-			    	}
-
-		            match parse_file(&entry, q, rus) {
-			            Result::Ok(val) => val,
-			            Result::Err(err) => return,
-		            }
+	            	visit_dirs(&path, q, rus);
 			    });
+            } else {
 			    let args: Vec<String> = env::args().collect();
 			    let query = &args[1];
-			    
-			    let mut _millis = time::Duration::from_millis(10);
 
-				if query == "languages" {
-				    _millis = time::Duration::from_millis(1);
-				}
-				if query == "news" {
-				    _millis = time::Duration::from_millis(5);
-				}
-
-				thread::sleep(_millis);
+	            match parse_file(&entry, q, rus) {
+		            Result::Ok(val) => val,
+		            Result::Err(err) => (),
+	            }
             }
         }
     }
