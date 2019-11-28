@@ -125,8 +125,14 @@ pub fn parse_file(entry: &DirEntry,
 
     let eng = info.lang() == Lang::Eng;
     let rus = info.lang() == Lang::Rus;
+    let spa = info.lang() == Lang::Spa;
+    let por = info.lang() == Lang::Por;
+    let ita = info.lang() == Lang::Ita;
+    let fra = info.lang() == Lang::Fra;
+    let ukr = info.lang() == Lang::Ukr;
+    let bel = info.lang() == Lang::Bel;
 
-    if eng || rus {
+    if (eng || rus) && !(spa || por || ita || fra || bel || ukr) {
 	    let client = redis::Client::open("redis://127.0.0.1/")?;
 	    let mut con = client.get_connection()?;
 	    let mut key = "rus";

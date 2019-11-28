@@ -159,25 +159,26 @@ fn process_item(
 	let terror_score 	= find_theme_score(&item, terror, "terror");
 	let ops_score 		= find_theme_score(&item, ops, "ops");
 	let games_score 	= find_theme_score(&item, games, "games");
+
 	if corp_score > 80 || sports_score > 80 || medicine_score > 80
 	|| science_score > 80 || tech_score > 80 || etv_score > 80 || gov_score > 80
 	|| music_score > 80 || art_score > 80 || book_score > 200 
-	|| ops_score > 500 || terror_score > 100 ||  games_score > 80 {
+	|| ops_score > 500 || terror_score > 100 ||  games_score > 0 {
 		if query == "debug" {
 			println!("news worthy: {:?}", &h1);
-			println!("corp score {}", &corp_score);
-			println!("sports score {}", &sports_score);
-			println!("medicine score {}", &medicine_score);
-			println!("science score {}", &science_score);
-			println!("tech score {}", &tech_score);
-			println!("etv score {}", &etv_score);
-			println!("gov score {}", &gov_score);
-			println!("book score {}", &book_score);
-			println!("music score {}", &music_score);
-			println!("art score {}", &art_score);
-			println!("ops score {}", &ops_score);
-			println!("terror score {}", &terror_score);
-			println!("games score {}", &games_score);
+			// println!("corp score {}", &corp_score);
+			// println!("sports score {}", &sports_score);
+			// println!("medicine score {}", &medicine_score);
+			// println!("science score {}", &science_score);
+			// println!("tech score {}", &tech_score);
+			// println!("etv score {}", &etv_score);
+			// println!("gov score {}", &gov_score);
+			// println!("book score {}", &book_score);
+			// println!("music score {}", &music_score);
+			// println!("art score {}", &art_score);
+			// println!("ops score {}", &ops_score);
+			// println!("terror score {}", &terror_score);
+			// println!("games score {}", &games_score);
 		}
 	}
 	return object!{
@@ -195,29 +196,31 @@ fn process_item(
 		"ops_score" => ops_score,
 		"games_score" => games_score
 	};
-	// return item;
 }
 
 fn find_theme_score(item:&JsonValue,theme:&Vec<String>, tname:&str) -> i64 {
 
 	let mut _score = 0;
 	let h1 = &item["h1"].to_string();
+	// let cc:Vec<&str> = Vec::new()
 	for c in theme {
-		let sc = fuzzy_indices(&h1, &c);
-		if sc != None {
-			let (score, indices) = sc.unwrap();
-			if tname == "games" {
-				 score > c.len() as i64 {
-					_score += score;
-				}
-			} else {
 
+		if tname == "games" {
+			if h1.to_lowercase().contains(c)  {
+				_score += 1;
+				println!("found game: {:?}", c);
+			}
+		} else {
+			let sc = fuzzy_indices(&h1, &c);
+			if sc != None {
+				let (score, indices) = sc.unwrap();
 				if score > (c.len()/2) as i64 {
 					_score += score;
 				}
 			}
 		}
 	}
+
 	return _score;
 }
 

@@ -150,7 +150,21 @@ pub fn load_games_glossary() -> Vec<String> {
 	let mut ndata: Vec<String> = Vec::new();
 	let msteam = data["glossary/games/steam.json"]["applist"]["apps"].members();
 	for ms in msteam {
-		ndata.push(ms["name"].to_string());
+		let name = ms["name"].to_string().to_lowercase();
+		if (&name.len() < &7) 
+		|| !name.contains(" ") 
+		|| (name.contains("the") && name.len() <= 8)
+		|| (name.contains("years") && name.len() <= 8)
+		|| name.contains("hong kong") 
+		|| name.contains("world war") 
+		|| name == "death"
+		|| name == "death toll"
+		|| name == "human rights"
+		|| name == "cannabis"
+		|| name == "one night" {
+			continue;
+		}
+		ndata.push(name);
 	}
 	return ndata;
 }

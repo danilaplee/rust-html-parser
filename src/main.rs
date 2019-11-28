@@ -64,7 +64,7 @@ fn main() {
                 .help("enable python neural nets with --python")
                 .long("python"),
             Arg::with_name("redis")
-                .help("enable redis cache with --redis")
+                .help(r#"enable redis cache with --redis="""#)
                 .long("redis")
         ])
         .get_matches();
