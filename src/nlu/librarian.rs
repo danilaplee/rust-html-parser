@@ -10,6 +10,7 @@ use std::process::{Command, Stdio};
 use std::collections::VecDeque;
 use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
 use std::sync::{Arc, Mutex};
+use std::collections::BTreeMap;
 
 use packer::Packer;
 
@@ -165,6 +166,32 @@ pub fn load_games_glossary() -> Vec<String> {
 			continue;
 		}
 		ndata.push(name);
+	}
+	return ndata;
+}
+pub fn load_games_btree() -> BTreeMap<String, String> {
+	let keys = [
+		"glossary/games/steam.json"
+	].to_vec();
+	let data = get_required_assets(keys);
+	let mut ndata: BTreeMap<String, String> = BTreeMap::new();
+	let msteam = data["glossary/games/steam.json"]["applist"]["apps"].members();
+	for ms in msteam {
+		let name = ms["name"].to_string().to_lowercase();
+		if (&name.len() < &7) 
+		|| !name.contains(" ") 
+		|| (name.contains("the") && name.len() <= 8)
+		|| (name.contains("years") && name.len() <= 8)
+		|| name.contains("hong kong") 
+		|| name.contains("world war") 
+		|| name == "death"
+		|| name == "death toll"
+		|| name == "human rights"
+		|| name == "cannabis"
+		|| name == "one night" {
+			continue;
+		}
+		ndata.insert(ms["name"].to_string().to_lowercase(), name);
 	}
 	return ndata;
 }

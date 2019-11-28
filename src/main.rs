@@ -18,8 +18,19 @@ use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 use json::JsonValue;
 use std::sync::mpsc::channel;
+use std::collections::BTreeMap;
 use std::thread;
 use clap::{App, Arg};
+
+#[macro_use]
+extern crate tantivy;
+use tantivy::collector::TopDocs;
+use tantivy::query::QueryParser;
+use tantivy::schema::*;
+use tantivy::Index;
+use tantivy::ReloadPolicy;
+use tempdir::TempDir;
+
 
 mod printer;
 mod nlu;
@@ -46,11 +57,13 @@ use parser::parse_file;
 use parser::visit_dirs;
 
 fn main() {
+	let index_path 								= TempDir::new("temp").unwrap();
 	let bstart 									= Instant::now();
 	let ru_db:Arc<Mutex<Vec<String>>> 			= Arc::new(Mutex::new(Vec::new()));
 	let done_index:Arc<Mutex<Vec<String>>> 		= Arc::new(Mutex::new(Vec::new()));
 	let category_db:Arc<Mutex<JsonValue>> 		= Arc::new(Mutex::new(json::JsonValue::new_object()));
 	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> 	= Arc::new(Mutex::new(VecDeque::new()));
+	let names_db:Arc<Mutex<BTreeMap<String, String>>> = Arc::new(Mutex::new(BTreeMap::new()));
     let args:Vec<String> 						= env::args().collect();
     let query	 								= &args[1];
     let filename 								= &args[2];
@@ -71,8 +84,16 @@ fn main() {
 	if matches.is_present("python") {
         disable_python = false;
     } 
+
+	let mut schema_builder = Schema::builder();
+			schema_builder.add_text_field("title", TEXT | STORED);
+			schema_builder.add_text_field("body", TEXT);
+    let schema 	= schema_builder.build();
+    let index 	= Index::create_in_dir(&index_path, schema.clone()).unwrap();
+    let index_writer = Arc::new(Mutex::new(index.writer(500_000_000).unwrap()));
     //SETUP DEBUG
 	if query == "debug" {
+
 	    println!("=============== RUNNING TGNEWS v0.5.1 ===============");
 	    println!("=============== START TIME {} ===============", Utc::now());
 	    println!("Searching for {}", query);
@@ -104,7 +125,7 @@ fn main() {
     //START DIRS
 	let start = Instant::now();
     let path = Path::new(filename);
-    let result = visit_dirs(path, Arc::clone(&gQueue), Arc::clone(&ru_db));
+    let result = visit_dirs(path, Arc::clone(&gQueue), Arc::clone(&ru_db), Arc::clone(&names_db), Arc::clone(&index_writer), schema.clone());
 	
 
 	if query == "languages" {
@@ -117,6 +138,13 @@ fn main() {
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
+		println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
+	    let mut lock0 = names_db.try_lock();
+	    if let Ok(ref mut mtx) = lock0 {
+		    println!("total items in names : {:?}", mtx.len());
+		}
+		drop(lock0);
+		let btree_service = glossary::start_btree_service(Arc::clone(&names_db), Arc::clone(&category_db));
 		block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
 		//COUNT PERFORMANCE
 		let end_time = Utc::now();
@@ -127,9 +155,9 @@ fn main() {
 	    println!("=============== BDURATION {:?} ===============", bduration);
 	    let mut lock1 = category_db.try_lock();
 	    if let Ok(ref mut mtx) = lock1 {
-		    // println!("all news data from glossary: {}", mtx.pretty(2));
 		    println!("total news data from glossary: {:?}", mtx.len());
 		}
+		drop(lock1);
 	}
 	//SETUP NEWS
 	if query == "news" {
@@ -159,48 +187,77 @@ fn run_glossaries(
 	disable_python:bool
 ) {
 	if(!disable_python) {
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 12);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 13);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 14);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 15);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 16);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 21);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 22);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
 	}
 	else {
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 12);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 13);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 14);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 15);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 16);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 21);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 22);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 23);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 33);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 37);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 61);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 53);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 27);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 34);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 88);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 23);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 55);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 51);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 52);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 54);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 56);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 58);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 88);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 24);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 26);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 27);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 29);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 30);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 61);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 62);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 63);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 6);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 7);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 7);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 88);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 23);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 55);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 51);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 52);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 54);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 56);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 58);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 88);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 24);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 26);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 27);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 29);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 30);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 31);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 62);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 63);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 6);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 7);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 7);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 8);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 6);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 8);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 8);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 6);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 7);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 9);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 0);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
 
 	}
 }

@@ -11,6 +11,7 @@ use std::process::{Command, Stdio};
 use std::collections::VecDeque;
 use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
 use std::sync::{Arc, Mutex};
+use std::collections::BTreeMap;
 
 use packer::Packer;
 
@@ -35,7 +36,9 @@ pub fn start(
 	db:Arc<Mutex<JsonValue>>,
 	offset:u64
 ) {
+	// test_fuzzy();
     thread::spawn(move || {
+		// let games:Vec<String> 	= librarian::load_games_glossary();
 	    let args: Vec<String> = env::args().collect();
 	    let query	 = &args[1];
 
@@ -51,7 +54,6 @@ pub fn start(
 		let art:Vec<String> 	= librarian::load_art_glossary();
 		let terror:Vec<String> 	= librarian::load_terror_glossary();
 		let ops:Vec<String> 	= librarian::load_ops_glossary();
-		let games:Vec<String> 	= librarian::load_games_glossary();
 		if query == "debug" {
 			println!("library loaded: {:?}", 
 				&corp.len()
@@ -66,21 +68,9 @@ pub fn start(
 				+&art.len()
 				+&terror.len()
 				+&ops.len()
-				+&games.len()
+				// +&games.len()
 			);
 		}
-		// println!("sports glossary length: {:?}", sports.len());
-		// println!("etv glossary length: {:?}", etv.len());
-		// println!("corp glossary length: {:?}", corp.len());
-		// println!("science glossary length: {:?}", science.len());
-		// println!("medicine glossary length: {:?}", medicine.len());
-		// println!("tech glossary length: {:?}", tech.len());
-		// println!("gov glossary length: {:?}", gov.len());
-		// println!("music glossary length: {:?}", music.len());
-		// println!("book glossary length: {:?}", book.len());
-		// println!("art glossary length: {:?}", art.len());
-		// println!("ops glossary length: {:?}", ops.len());
-		// println!("terror glossary length: {:?}", terror.len());
 		let mut not_finished = true;
 		while not_finished {
 		    let mut lock = queue.try_lock();
@@ -102,29 +92,73 @@ pub fn start(
 			    		&art,
 			    		&book,
 			    		&terror,
-			    		&ops,
-			    		&games
+			    		&ops
 			    	);
-				    let mut lock2 = db.try_lock();
-				    if let Ok(ref mut mtx2) = lock2 {
-				    	// println!("mtx 2: {:?}", mtx2);
-				    	let id = &nitem["path"].to_string();
-				    	if mtx2[id].is_null() {
-					    	nitem["scores"] = scores;
-					    	mtx2[id] = nitem;
-				    	}
-				    	else {
-					    	mtx2[id]["scores"] = scores;
-				    	}
-				    }
-			    	drop(lock2);
+			    	if(scores["highest_value"].as_u64().unwrap() > 0) {
+					    let mut lock2 = db.try_lock();
+					    if let Ok(ref mut mtx2) = lock2 {
+					    	// println!("mtx 2: {:?}", mtx2);
+					    	let id = &nitem["path"].to_string();
+					    	if mtx2[id].is_null() {
+						    	nitem["scores"] = scores;
+						    	mtx2[id] = nitem;
+					    	}
+					    	else {
+						    	mtx2[id]["scores"] = scores;
+					    	}
+					    }
+				    	drop(lock2);
+			    	}
 		    	}
-		    } 
-		    let _millis = time::Duration::from_millis(offset);
+		    } else {
+			    drop(lock);
+		    }
+		    let _millis = time::Duration::from_nanos(offset);
 			thread::sleep(_millis);
 		}
     });
 }
+
+pub fn start_btree_service(_items:Arc<Mutex<BTreeMap<String, String>>>, db:Arc<Mutex<JsonValue>>) {
+    thread::spawn(move || {
+		let games:Vec<String> 	= librarian::load_games_glossary();
+	    let args: Vec<String> 	= env::args().collect();
+	    let query	 			= &args[1];
+	    let games_scores 		= find_btree_score(_items, &games, "games");
+		println!("====================== FINISHED BTREE ======================");
+		println!("====================== FINISHED BTREE ======================");
+		println!("====================== FINISHED BTREE ======================");
+		println!("====================== FINISHED BTREE ======================");
+	});
+}
+
+fn find_btree_score(_items:Arc<Mutex<BTreeMap<String, String>>>, theme:&Vec<String>, tname:&str) -> JsonValue {
+
+	let args: Vec<String> = env::args().collect();
+	let query	 = &args[1];
+	let mut _score = 0;
+    let mut lock = _items.try_lock();
+    let mut j 	= object!{};
+
+    if let Ok(ref items) = lock {
+		for word in theme {
+			match items.get(word) {
+		       Some(item) => {
+ 		       	println!("found game item {:?} with key {:?}", &item, &word);
+		       	// let (key, value) = item
+		       	// if(j[value].is_null()) {
+
+		       	// }
+		       	_score += 1
+		       },
+		       None => continue
+		    }
+		}
+    	drop(&lock);
+	}
+	return j;
+}
+
 
 fn process_item(
 	item:&JsonValue,
@@ -139,11 +173,10 @@ fn process_item(
 	art:&Vec<String>,
 	book:&Vec<String>,
 	terror:&Vec<String>,
-	ops:&Vec<String>,
-	games:&Vec<String>
+	ops:&Vec<String>
 ) -> json::JsonValue {
-    let args: Vec<String> = env::args().collect();
-    let query	 = &args[1];
+    let args:Vec<String>= env::args().collect();
+    let query	 		= &args[1];
 	
 	let h1 				= &item["h1"].to_string();
 	let corp_score 		= find_theme_score(&item, corp, "corp");
@@ -158,27 +191,34 @@ fn process_item(
 	let book_score 		= find_theme_score(&item, book, "book");
 	let terror_score 	= find_theme_score(&item, terror, "terror");
 	let ops_score 		= find_theme_score(&item, ops, "ops");
-	let games_score 	= find_theme_score(&item, games, "games");
-
-	if corp_score > 80 || sports_score > 80 || medicine_score > 80
-	|| science_score > 80 || tech_score > 80 || etv_score > 80 || gov_score > 80
-	|| music_score > 80 || art_score > 80 || book_score > 200 
-	|| ops_score > 500 || terror_score > 100 ||  games_score > 0 {
+	let scores = object!{
+		"corp_score" => corp_score,
+		"sports_score" => sports_score,
+		"medicine_score" => medicine_score,
+		"science_score" => science_score,
+		"tech_score" => tech_score,
+		"etv_score" => etv_score,
+		"gov_score" => gov_score,
+		"music_score" => music_score,
+		"art_score" => art_score,
+		"book_score" => book_score,
+		"terror_score" => terror_score,
+		// "ops_score" => ops_score,
+	};
+	let mut highest_key = "";
+	let mut highest_value = 0;
+	for score in scores.entries() {
+		let (key, value) = score;
+		let v = value.as_u64().unwrap();
+		if v > highest_value {
+			highest_value = v;
+			highest_key = key;
+		}
+	}
+	if highest_value > 0 {
 		if query == "debug" {
-			println!("news worthy: {:?}", &h1);
-			// println!("corp score {}", &corp_score);
-			// println!("sports score {}", &sports_score);
-			// println!("medicine score {}", &medicine_score);
-			// println!("science score {}", &science_score);
-			// println!("tech score {}", &tech_score);
-			// println!("etv score {}", &etv_score);
-			// println!("gov score {}", &gov_score);
-			// println!("book score {}", &book_score);
-			// println!("music score {}", &music_score);
-			// println!("art score {}", &art_score);
-			// println!("ops score {}", &ops_score);
-			// println!("terror score {}", &terror_score);
-			// println!("games score {}", &games_score);
+			println!("news worthy: {}, {:?}",&highest_key, &h1);
+			// println!("scores: {}", &scores.pretty(2));
 		}
 	}
 	return object!{
@@ -194,7 +234,8 @@ fn process_item(
 		"book_score" => book_score,
 		"terror_score" => terror_score,
 		"ops_score" => ops_score,
-		"games_score" => games_score
+		"highest_value" => highest_value,
+		"highest_key" => highest_key
 	};
 }
 
@@ -217,9 +258,14 @@ fn find_theme_score(item:&JsonValue,theme:&Vec<String>, tname:&str) -> i64 {
 		} else {
 			let sc = fuzzy_indices(&h1, &c);
 			if sc != None {
-				let (score, indices) = sc.unwrap();
-				if score > (c.len()/2) as i64 {
-					_score += score;
+				let (score, indices) = &sc.unwrap();
+				if score > &90 {
+					_score += 1;
+					if query == "debug" {
+						if tname == "sports" {
+							// println!("found sports: {:?} in {}", &c, &h1);
+						}
+					}
 				}
 			}
 		}

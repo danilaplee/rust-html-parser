@@ -30,6 +30,10 @@ use json::JsonValue;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use std::collections::VecDeque;
+use std::collections::BTreeMap;
+use futures::join;
+use tantivy::{IndexWriter, doc};
+use tantivy::schema::*;
 
 use super::tgnews_nlu_reply;
 use super::tgnews_nlu_request;
@@ -42,7 +46,11 @@ use super::add_to_set;
 pub fn visit_dirs(
 	dir: &Path, 
 	queue:Arc<Mutex<VecDeque<JsonValue>>>,
-	ru_db:Arc<Mutex<Vec<String>>>) -> io::Result<()> {
+	ru_db:Arc<Mutex<Vec<String>>>,
+	names_db:Arc<Mutex<BTreeMap<String, String>>>,
+	_index:Arc<Mutex<IndexWriter>>,
+	_schema:Schema) -> io::Result<()> {
+	let mut pending = vec![];
     let mut ittr = 0;
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
@@ -52,29 +60,37 @@ pub fn visit_dirs(
             let path = entry.path();
 		    let q = Arc::clone(&queue);
 		    let rus = Arc::clone(&ru_db);
-
+		    let names = Arc::clone(&names_db);
+		    let index = Arc::clone(&_index);
+		    let schema = _schema.clone();
             if path.is_dir() {
-			    thread::spawn(move || {
-	            	visit_dirs(&path, q, rus);
-			    });
+			    pending.push(thread::spawn(move || {
+	            	visit_dirs(&path, q, rus, names, index, schema);
+			    }));
             } else {
 			    let args: Vec<String> = env::args().collect();
 			    let query = &args[1];
 
-	            match parse_file(&entry, q, rus) {
+	            match parse_file(&entry, q, rus, names, index, schema) {
 		            Result::Ok(val) => val,
 		            Result::Err(err) => (),
 	            }
             }
         }
     }
+    for handle in pending {
+	    let _ = handle.join(); // maybe consider handling errors propagated from the thread here
+	}
     Ok(())
 }
 
 
 pub fn parse_file(entry: &DirEntry, 
 	queue:Arc<Mutex<VecDeque<JsonValue>>>,
-	ru_db:Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn std::error::Error + 'static>> {
+	ru_db:Arc<Mutex<Vec<String>>>,
+	names_db:Arc<Mutex<BTreeMap<String, String>>>,
+	_index:Arc<Mutex<IndexWriter>>,
+	schema:Schema) -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
@@ -140,7 +156,7 @@ pub fn parse_file(entry: &DirEntry,
 	    let mut lock = queue.try_lock();
 	    if let Ok(ref mut mtx) = lock {
 	        // println!("total queue length: {:?}", mtx.len());
-	       	mtx.push_back(lang_data);
+	       	mtx.push_back(json::parse(&lang_data.dump()).unwrap());
 	    } else {
 	        // println!("parser first try_lock failed");
 	    }
@@ -155,6 +171,28 @@ pub fn parse_file(entry: &DirEntry,
 		    }
 		    drop(lock2);
 	    }
+	    let mut lock3 = names_db.try_lock();
+	    if let Ok(ref mut mtx3) = lock3 {
+	        // println!("total queue length: {:?}", mtx.len())
+	        let h2 = &lang_data["h1"];
+	        let h3 = &lang_data["h1"];
+	       	mtx3.insert(h2.to_string().to_lowercase(), h3.to_string().to_lowercase());
+	    } else {
+	        // println!("parser second try_lock failed");
+	    }
+	    drop(lock3);
+        let title = schema.get_field("title").unwrap();
+	    let body = schema.get_field("body").unwrap();
+        let h4 = &lang_data["h1"];
+	    let mut lock4 = _index.try_lock();
+	    if let Ok(ref mut writer) = lock4 {
+	    	writer.add_document(doc!(
+			    title => h4.to_string(),
+			    body => "________empty_body_________"
+		    ));
+		    writer.commit();
+	    }
+	    drop(lock4);
 	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }
     Ok(())
