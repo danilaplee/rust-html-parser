@@ -66,7 +66,9 @@ fn main() {
 	let names_db:Arc<Mutex<BTreeMap<String, String>>> = Arc::new(Mutex::new(BTreeMap::new()));
     let args:Vec<String> 						= env::args().collect();
     let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 200);
-    let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 1);
+    let ws_pool 								= ThreadPool::with_name("ws_pool1".into(), 1);
+    let ws_pool2 								= ThreadPool::with_name("ws_pool2".into(), 1);
+    let ws_pool3 								= ThreadPool::with_name("ws_pool3".into(), 1);
     let query	 								= &args[1];
     let filename 								= &args[2];
     let mut bduration 							= Instant::now().elapsed();
@@ -92,8 +94,14 @@ fn main() {
 			schema_builder.add_text_field("body", TEXT);
     let schema 	= schema_builder.build();
     let mut index = Index::create_in_ram(schema.clone());
+    let mut index2 = Index::create_in_ram(schema.clone());
+    let mut index3 = Index::create_in_ram(schema.clone());
     	&index.set_default_multithread_executor();
-    let index_writer = Arc::new(Mutex::new(index.writer(1000_000_000).unwrap()));
+    	&index2.set_default_multithread_executor();
+    	&index3.set_default_multithread_executor();
+    let index_writer = Arc::new(Mutex::new(index.writer(100_000_000).unwrap()));
+    let index_writer2 = Arc::new(Mutex::new(index2.writer(100_000_000).unwrap()));
+    let index_writer3 = Arc::new(Mutex::new(index3.writer(100_000_000).unwrap()));
     //SETUP DEBUG
 	if query == "debug" {
 
@@ -136,7 +144,11 @@ fn main() {
     	Arc::clone(&index_writer), 
     	schema.clone(), 
     	fs_pool.clone(), 
-    	ws_pool.clone()
+    	ws_pool.clone(), 
+    	ws_pool2.clone(),
+    	Arc::clone(&index_writer2),
+    	ws_pool3.clone(),
+    	Arc::clone(&index_writer3)
     );
 	fs_pool.join();
 	println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
@@ -161,12 +173,16 @@ fn main() {
 		}
 		drop(lock0);
 		let _index = Arc::new(Mutex::new(index));
+		let _index2 = Arc::new(Mutex::new(index2));
+		let _index3 = Arc::new(Mutex::new(index3));
 		let bq_service = glossary::start_bigquery_service(
 			Arc::clone(&_index), 
+			Arc::clone(&_index2), 
+			Arc::clone(&_index3), 
 			Arc::clone(&category_db), 
 			schema.clone()
 		);
-	println!("====================== BTREE FINISHED IN {:?} ======================", start.elapsed());
+		println!("====================== BTREE FINISHED IN {:?} ======================", start.elapsed());
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");

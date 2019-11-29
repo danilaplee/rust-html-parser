@@ -24,8 +24,14 @@ struct Assets;
 
 fn is_double_name(input:String) -> bool {
 	let items = input.split_whitespace();
+	let len:Vec<&str> = input.split_whitespace().collect();
 	for i in items {
-		if input.matches(i).count() > 1 {
+		let i1 = format!("{} ", &i);
+		let i2 = format!(" {}", &i);
+		// println!("looking for {:?}", (&i1,&i2));
+		if (len.len() > (input.len()/2)) || (input.matches(&i).count() > 1 && input.matches(&i1).count() > 1)
+		|| (input.matches(&i).count() > 1 && input.matches(&i2).count() > 1) {
+			// println!("double name: {}", input);
 			return true;
 		}
 	}

@@ -16,6 +16,7 @@ use tantivy::{Index, IndexReader,ReloadPolicy, DocAddress, Score, doc};
 use tantivy::schema::*;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
+use threadpool::ThreadPool;
 
 use packer::Packer;
 
@@ -123,13 +124,29 @@ pub fn start(
     });
 }
 
-pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema) {
-    thread::spawn(move || {
+pub fn start_bigquery_service(index1:Arc<Mutex<Index>>,index2:Arc<Mutex<Index>>,index3:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema) {
+    let pool = ThreadPool::with_name("bq_pool2".into(), 3);
+    let schema_clone = schema.clone();
+    let schema_clone2 = schema.clone();
+    pool.execute(move || {
 		let games:Vec<String> 	= librarian::load_games_glossary();
 	    let args: Vec<String> 	= env::args().collect();
 	    let query	 			= &args[1];
-	    let games_scores 		= find_bq_score(index, schema, &games, "games");
-	}).join();
+	    let games_scores 		= find_bq_score(index1, schema_clone, &games, "games");
+	});
+	pool.execute(move || {
+		let games:Vec<String> 	= librarian::load_games_glossary();
+	    let args: Vec<String> 	= env::args().collect();
+	    let query	 			= &args[1];
+	    let games_scores 		= find_bq_score(index2, schema_clone2, &games, "games");
+	});
+	pool.execute(move || {
+		let games:Vec<String> 	= librarian::load_games_glossary();
+	    let args: Vec<String> 	= env::args().collect();
+	    let query	 			= &args[1];
+	    let games_scores 		= find_bq_score(index3, schema.clone(), &games, "games");
+	});
+	pool.join();
 }
 
 fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tname:&str) -> JsonValue {
@@ -164,7 +181,7 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 					    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
 
 						for (sc, doc_address) in top_docs {
-							if sc >= q.len() as f32 {
+							if sc >= 15 as f32 {
 							    let retrieved_doc = searcher.doc(doc_address);
 							    match retrieved_doc {
 							    	Ok(ref doc) => {

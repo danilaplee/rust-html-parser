@@ -53,7 +53,12 @@ pub fn visit_dirs(
 	_index:Arc<Mutex<IndexWriter>>,
 	_schema:Schema,
 	_pool:ThreadPool,
-	ipool:ThreadPool) -> io::Result<()> {
+	ipool:ThreadPool,
+	ipool2:ThreadPool,
+	_index2:Arc<Mutex<IndexWriter>>,
+	ipool3:ThreadPool,
+	_index3:Arc<Mutex<IndexWriter>>
+	) -> io::Result<()> {
     let mut ittr = 0;
     let data = json::JsonValue::new_array();
     if dir.is_dir() {
@@ -65,19 +70,39 @@ pub fn visit_dirs(
 		    let q 		= Arc::clone(&queue);
 		    let rus 	= Arc::clone(&ru_db);
 		    let names 	= Arc::clone(&names_db);
-		    let index 	= Arc::clone(&_index);
 		    let schema 	= _schema.clone();
 		    let p 		= _pool.clone();
 		    let ip 		= ipool.clone();
+		    let index 	= Arc::clone(&_index);
+		    let ip2 	= ipool2.clone();
+		    let index2 	= Arc::clone(&_index2);
+		    let ip3 	= ipool3.clone();
+		    let index3 	= Arc::clone(&_index3);
+
             if path.is_dir() {
 			    _pool.execute(move || {
-	            	visit_dirs(&path, q, rus, names, index, schema, p, ip);
+	            	visit_dirs(&path, q, rus, names, index, schema, p, ip, ip2, index2, ip3, index3);
 			    });
             } else {
 			    let args: Vec<String> = env::args().collect();
-			    let query = &args[1];
-
-	            match parse_file(&entry, q, rus, names, index, schema, ip) {
+			    let query = &args[1];;
+			    let mut cp 	= ThreadPool::new(1);
+			    let mut ci 	= Arc::clone(&_index);
+			    if ip.queued_count() < 20000 {
+			    	cp = ip.clone();
+			    	ci = index.clone();
+			    }
+			    else {
+			    	if ip2.queued_count() < 30000 {
+				    	cp = ip2.clone();
+				    	ci = index2.clone();
+			    	}
+			    	else {
+				    	cp = ip3.clone();
+				    	ci = index3.clone();
+			    	}
+			    }
+	            match parse_file(&entry, q, rus, names, ci, schema, cp) {
 		            Result::Ok(val) => val,
 		            Result::Err(err) => (),
 	            }

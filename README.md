@@ -12,3 +12,7 @@ cargo run news ./DataClusteringSample0817
 ```
 
 487s - 300k
+
+2x index = 329s - 300k
+
+1x index = 421s - 300k (722s total)
