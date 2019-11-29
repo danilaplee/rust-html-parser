@@ -129,10 +129,6 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    let args: Vec<String> 	= env::args().collect();
 	    let query	 			= &args[1];
 	    let games_scores 		= find_bq_score(index, schema, &games, "games");
-		println!("====================== FINISHED BTREE ======================");
-		println!("====================== FINISHED BTREE ======================");
-		println!("====================== FINISHED BTREE ======================");
-		println!("====================== FINISHED BTREE ======================");
 	}).join();
 }
 
@@ -143,18 +139,18 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 	let mut _score = 0;
     let mut j 	= object!{};
     let mut lock_sucess = false;
-    println!("========== start lock =========");
+    // println!("========== start lock =========");
     let mut lock = _index.try_lock();
     while !lock_sucess {
 	    if let Ok(ref index) = lock {
-	    	println!("======== lock success ========");
+	    	// println!("======== lock success ========");
 	    	let reader = index.reader().unwrap();
-	    	println!("======== got reader success ========");
+	    	// println!("======== got reader success ========");
 			let searcher = reader.searcher();
 
 	        let title = schema.get_field("title").unwrap();
 		    let body = schema.get_field("body").unwrap();
-	    	println!("======== got fields success ========");
+	    	// println!("======== got fields success ========");
 
 			let query_parser = QueryParser::for_index(&index, vec![title, body]);
 

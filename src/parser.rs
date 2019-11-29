@@ -52,10 +52,10 @@ pub fn visit_dirs(
 	names_db:Arc<Mutex<BTreeMap<String, String>>>,
 	_index:Arc<Mutex<IndexWriter>>,
 	_schema:Schema,
-	_pool:ThreadPool) -> io::Result<()> {
-
-	let pool = ThreadPool::new(8);
+	_pool:ThreadPool,
+	ipool:ThreadPool) -> io::Result<()> {
     let mut ittr = 0;
+    let data = json::JsonValue::new_array();
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
 	    	ittr += 1;
@@ -68,22 +68,22 @@ pub fn visit_dirs(
 		    let index 	= Arc::clone(&_index);
 		    let schema 	= _schema.clone();
 		    let p 		= _pool.clone();
+		    let ip 		= ipool.clone();
             if path.is_dir() {
-			    pool.execute(move || {
-	            	visit_dirs(&path, q, rus, names, index, schema, p);
+			    _pool.execute(move || {
+	            	visit_dirs(&path, q, rus, names, index, schema, p, ip);
 			    });
             } else {
 			    let args: Vec<String> = env::args().collect();
 			    let query = &args[1];
 
-	            match parse_file(&entry, q, rus, names, index, schema) {
+	            match parse_file(&entry, q, rus, names, index, schema, ip) {
 		            Result::Ok(val) => val,
 		            Result::Err(err) => (),
 	            }
             }
         }
     }
-    pool.join();
     Ok(())
 }
 
@@ -93,7 +93,8 @@ pub fn parse_file(entry: &DirEntry,
 	ru_db:Arc<Mutex<Vec<String>>>,
 	names_db:Arc<Mutex<BTreeMap<String, String>>>,
 	_index:Arc<Mutex<IndexWriter>>,
-	schema:Schema) -> Result<(), Box<dyn std::error::Error + 'static>> {
+	schema:Schema,
+	_pool:ThreadPool) -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
@@ -153,62 +154,64 @@ pub fn parse_file(entry: &DirEntry,
 	    	"lang" => key
 	    };
 
-	    // REDIS DISABLED TEMPORARY
-	    // let client = redis::Client::open("redis://127.0.0.1/")?;
-	    // let mut con = client.get_connection()?;
-	    // con.lpush(tgnews_nlu, &lang_data.dump())?;
+	    _pool.execute(move || {
+		    // REDIS DISABLED TEMPORARY
+		    // let client = redis::Client::open("redis://127.0.0.1/")?;
+		    // let mut con = client.get_connection()?;
+		    // con.lpush(tgnews_nlu, &lang_data.dump())?;
 
-	    let mut lock = queue.try_lock();
-	    if let Ok(ref mut mtx) = lock {
-	        // println!("total queue length: {:?}", mtx.len());
-	       	mtx.push_back(json::parse(&lang_data.dump()).unwrap());
-	    } else {
-	        // println!("parser 1 try_lock failed");
-	    }
-	    drop(lock);
-	    if key == "rus" {
-		    let mut lock2 = ru_db.try_lock();
-		    if let Ok(ref mut mtx2) = lock2 {
+		    let mut lock = queue.try_lock();
+		    if let Ok(ref mut mtx) = lock {
 		        // println!("total queue length: {:?}", mtx.len());
-		       	mtx2.push(pstr);
+		       	mtx.push_back(json::parse(&lang_data.dump()).unwrap());
 		    } else {
-		        // println!("parser 2 try_lock failed");
+		        // println!("parser 1 try_lock failed");
 		    }
-		    drop(lock2);
-	    }
+		    drop(lock);
+		    if key == "rus" {
+			    let mut lock2 = ru_db.try_lock();
+			    if let Ok(ref mut mtx2) = lock2 {
+			        // println!("total queue length: {:?}", mtx.len());
+			       	mtx2.push(pstr);
+			    } else {
+			        // println!("parser 2 try_lock failed");
+			    }
+			    drop(lock2);
+		    }
 
-	    let mut lock3 = names_db.try_lock();
-	    if let Ok(ref mut mtx3) = lock3 {
-	        // println!("total queue length: {:?}", mtx.len())
-	        let h2 = &lang_data["h1"];
-	        let h3 = &lang_data["h1"];
-	       	mtx3.insert(h2.to_string().to_lowercase(), h3.to_string().to_lowercase());
-	    } else {
-	        // println!("parser 3 try_lock failed");
-	    }
-	    drop(lock3);
+		    let mut lock3 = names_db.try_lock();
+		    if let Ok(ref mut mtx3) = lock3 {
+		        // println!("total queue length: {:?}", mtx.len())
+		        let h2 = &lang_data["h1"];
+		        let h3 = &lang_data["h1"];
+		       	mtx3.insert(h2.to_string().to_lowercase(), h3.to_string().to_lowercase());
+		    } else {
+		        // println!("parser 3 try_lock failed");
+		    }
+		    drop(lock3);
 
-        let title = schema.get_field("title").unwrap();
-	    let body = schema.get_field("body").unwrap();
-        let h4 = &lang_data["h1"];
-        let mut write4 = false;
-        while write4 == false {
-		    let mut lock4 = _index.try_lock();
-		    if let Ok(ref mut writer) = lock4 {
-		        // println!("parser 4 try_lock success");
-		    	writer.add_document(doc!(
-				    title => h4.to_string(),
-				    body => ""
-			    ));
-			    writer.commit();
-			    write4 = true;
-			    drop(lock4);
-		    }
-		    else {
-			    drop(lock4);
-				thread::sleep(time::Duration::from_nanos(50));
-		    }
-        }
+	        let title = schema.get_field("title").unwrap();
+		    let body = schema.get_field("body").unwrap();
+	        let h4 = &lang_data["h1"];
+	        let mut write4 = false;
+	        while write4 == false {
+			    let mut lock4 = _index.try_lock();
+			    if let Ok(ref mut writer) = lock4 {
+			        // println!("parser 4 try_lock success");
+			    	writer.add_document(doc!(
+					    title => h4.to_string(),
+					    body => ""
+				    ));
+				    writer.commit();
+				    write4 = true;
+				    drop(lock4);
+			    }
+			    else {
+				    drop(lock4);
+					thread::sleep(time::Duration::from_nanos(1));
+			    }
+	        }
+	    });
 	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }
     Ok(())

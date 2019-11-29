@@ -65,7 +65,8 @@ fn main() {
 	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> 	= Arc::new(Mutex::new(VecDeque::new()));
 	let names_db:Arc<Mutex<BTreeMap<String, String>>> = Arc::new(Mutex::new(BTreeMap::new()));
     let args:Vec<String> 						= env::args().collect();
-    let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 4);
+    let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 200);
+    let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 2);
     let query	 								= &args[1];
     let filename 								= &args[2];
     let mut bduration 							= Instant::now().elapsed();
@@ -109,7 +110,7 @@ fn main() {
 	    println!("total boot time: {:?}", bduration);
 	}
 
-	//SETUP LANGUAGESuse threadpool::ThreadPool;
+	//SETUP LANGUAGES
 	if query == "languages" {
 		print_languages_start();
 	}
@@ -127,8 +128,22 @@ fn main() {
     //START DIRS
 	let start = Instant::now();
     let path = Path::new(filename);
-    let result = visit_dirs(path, Arc::clone(&gQueue), Arc::clone(&ru_db), Arc::clone(&names_db), Arc::clone(&index_writer), schema.clone(), fs_pool.clone());
+    let result = visit_dirs(
+    	path, 
+    	Arc::clone(&gQueue), 
+    	Arc::clone(&ru_db), 
+    	Arc::clone(&names_db), 
+    	Arc::clone(&index_writer), 
+    	schema.clone(), 
+    	fs_pool.clone(), 
+    	ws_pool.clone()
+    );
 	fs_pool.join();
+	println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
+	drop(fs_pool);
+	println!("total jobs for ws {}", ws_pool.queued_count());
+	ws_pool.join();
+	println!("====================== WriteSystem FINISHED IN {:?} ======================", start.elapsed());
 
 	if query == "languages" {
 		print_languages_end(Arc::clone(&ru_db));
@@ -140,14 +155,23 @@ fn main() {
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
-		println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
 	    let mut lock0 = names_db.try_lock();
 	    if let Ok(ref mut mtx) = lock0 {
 		    println!("total items in names : {:?}", mtx.len());
 		}
 		drop(lock0);
 		let _index = Arc::new(Mutex::new(index));
-		let bq_service = glossary::start_bigquery_service(Arc::clone(&_index), Arc::clone(&category_db), schema.clone());
+		let bq_service = glossary::start_bigquery_service(
+			Arc::clone(&_index), 
+			Arc::clone(&category_db), 
+			schema.clone()
+		);
+	println!("====================== BTREE FINISHED IN {:?} ======================", start.elapsed());
+		println!("====================== FINISHED BTREE ======================");
+		println!("====================== FINISHED BTREE ======================");
+		println!("====================== FINISHED BTREE ======================");
+		println!("====================== FINISHED BTREE ======================");
+
 		block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
 		//COUNT PERFORMANCE
 		let end_time = Utc::now();
@@ -189,11 +213,11 @@ fn run_glossaries(
 	db:Arc<Mutex<JsonValue>>,
 	disable_python:bool
 ) {
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
 		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
 }
 
