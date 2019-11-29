@@ -1,3 +1,5 @@
+extern crate regex;
+
 use json::JsonValue;
 use json::object;
 use std::fs::{self, DirEntry, File};
@@ -11,6 +13,8 @@ use std::collections::VecDeque;
 use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
+use regex::Regex;
+
 
 use packer::Packer;
 
@@ -151,21 +155,33 @@ pub fn load_games_glossary() -> Vec<String> {
 	let mut ndata: Vec<String> = Vec::new();
 	let msteam = data["glossary/games/steam.json"]["applist"]["apps"].members();
 	for ms in msteam {
-		let name = ms["name"].to_string().to_lowercase();
-		if (&name.len() < &7) 
-		|| !name.contains(" ") 
-		|| (name.contains("the") && name.len() <= 8)
-		|| (name.contains("years") && name.len() <= 8)
-		|| name.contains("hong kong") 
-		|| name.contains("world war") 
-		|| name == "death"
-		|| name == "death toll"
-		|| name == "human rights"
-		|| name == "cannabis"
-		|| name == "one night" {
+		let name = ms["name"].to_string();
+		let splt: Vec<&str> = name.split_whitespace().collect();
+		if (&name.len() < &12) 
+		|| (name.to_lowercase().contains("the") && splt.len() > 4)
+		|| (name.to_lowercase().contains("years") && splt.len() > 4)
+		|| name.to_lowercase().contains("hong kong") 
+		|| name.to_lowercase().contains("world war") 
+		|| name.to_lowercase() == "death"
+		|| name.to_lowercase() == "death toll"
+		|| name.to_lowercase() == "human rights"
+		|| name.to_lowercase() == "cannabis"
+		|| name.to_lowercase() == "one night"
+		|| name.to_lowercase() == "love love love"
+		|| name == "Run Zeus Run"
+		|| name == "Bump Bump Bump"
+		|| name == "Beat Da Beat"
+		|| name == "I L L U S I O N"
+		|| name == "All You Can Eat"
+		|| name == "Combat Force"
+		|| name == "KILL la KILL -IF"
+		|| name == "Hentai 2+2=4"
+		|| name == "Door To Door"
+		|| ndata.contains(&name) {
 			continue;
 		}
-		ndata.push(name);
+		// let re = Regex::new(r#"[^a-zA-Z0-9]+"#).unwrap();
+		ndata.push(ms["name"].to_string());
 	}
 	return ndata;
 }

@@ -12,6 +12,10 @@ use std::collections::VecDeque;
 use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
+use tantivy::{Index, IndexReader,ReloadPolicy, DocAddress, Score, doc};
+use tantivy::schema::*;
+use tantivy::collector::TopDocs;
+use tantivy::query::QueryParser;
 
 use packer::Packer;
 
@@ -119,43 +123,79 @@ pub fn start(
     });
 }
 
-pub fn start_btree_service(_items:Arc<Mutex<BTreeMap<String, String>>>, db:Arc<Mutex<JsonValue>>) {
+pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema) {
     thread::spawn(move || {
 		let games:Vec<String> 	= librarian::load_games_glossary();
 	    let args: Vec<String> 	= env::args().collect();
 	    let query	 			= &args[1];
-	    let games_scores 		= find_btree_score(_items, &games, "games");
+	    let games_scores 		= find_bq_score(index, schema, &games, "games");
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
-	});
+	}).join();
 }
 
-fn find_btree_score(_items:Arc<Mutex<BTreeMap<String, String>>>, theme:&Vec<String>, tname:&str) -> JsonValue {
+fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tname:&str) -> JsonValue {
 
 	let args: Vec<String> = env::args().collect();
 	let query	 = &args[1];
 	let mut _score = 0;
-    let mut lock = _items.try_lock();
     let mut j 	= object!{};
+    let mut lock_sucess = false;
+    println!("========== start lock =========");
+    let mut lock = _index.try_lock();
+    while !lock_sucess {
+	    if let Ok(ref index) = lock {
+	    	println!("======== lock success ========");
+	    	let reader = index.reader().unwrap();
+	    	println!("======== got reader success ========");
+			let searcher = reader.searcher();
 
-    if let Ok(ref items) = lock {
-		for word in theme {
-			match items.get(word) {
-		       Some(item) => {
- 		       	println!("found game item {:?} with key {:?}", &item, &word);
-		       	// let (key, value) = item
-		       	// if(j[value].is_null()) {
+	        let title = schema.get_field("title").unwrap();
+		    let body = schema.get_field("body").unwrap();
+	    	println!("======== got fields success ========");
 
-		       	// }
-		       	_score += 1
-		       },
-		       None => continue
-		    }
+			let query_parser = QueryParser::for_index(&index, vec![title, body]);
+
+			
+			for word in theme {
+				let q:&str = word.as_str();
+				let query = query_parser.parse_query(q);
+			    match query {
+			    	Ok(query) => {
+						let top_docs: Vec<(Score, DocAddress)> =
+					    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
+
+						for (sc, doc_address) in top_docs {
+							if sc >= q.len() as f32 {
+							    let retrieved_doc = searcher.doc(doc_address);
+							    match retrieved_doc {
+							    	Ok(ref doc) => {
+									    println!("Found key: {:?} score: {}  doc: {:?}",q, sc, schema.to_json(&doc));
+							    	},
+							    	Err(err) => {
+								    	println!("Found Game News with  but error: {:?}", &err);
+
+							    	}
+							    }
+							}
+				    	}
+				    },
+			    	Err(err) => {
+				    	// println!("query parsing error: {:?}", &err);
+				    	continue;
+			    	}
+				}
+			}
+			lock_sucess = true;
+			drop(&lock);
 		}
-    	drop(&lock);
-	}
+		else {
+			thread::sleep(time::Duration::from_nanos(10000));
+			drop(&lock);
+		}
+    }
 	return j;
 }
 
@@ -217,7 +257,7 @@ fn process_item(
 	}
 	if highest_value > 0 {
 		if query == "debug" {
-			println!("news worthy: {}, {:?}",&highest_key, &h1);
+			// println!("news worthy: {}, {:?}",&highest_key, &h1);
 			// println!("scores: {}", &scores.pretty(2));
 		}
 	}

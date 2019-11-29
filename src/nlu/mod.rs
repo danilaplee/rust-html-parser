@@ -92,13 +92,13 @@ pub fn run_nlu_service()  {
 
 pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>, no_python:bool) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 
-    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-    let mut con = client.get_connection().unwrap();
-	let mut pubsub = con.as_pubsub();
-	let mut done = false;
-	pubsub.subscribe(tgnews_nlu_end);
+ //    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+ //    let mut con = client.get_connection().unwrap();
+	// let mut pubsub = con.as_pubsub();
+	// let mut done = false;
+	// pubsub.subscribe(tgnews_nlu_end);
 	loop {
-	    if done || no_python {
+	    // if no_python {
 		    let mut lock = queue.try_lock();
 		    if let Ok(ref mut mtx) = lock {
 		        println!("total queue length: {:?}", mtx.len());
@@ -111,16 +111,17 @@ pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>, no_p
 		    drop(lock);
 		    let _millis = time::Duration::from_millis(1000);
 			thread::sleep(_millis);
-	    } else {
-		    let msg = pubsub.get_message()?;
-		    let payload : String = msg.get_payload()?;
-		    if payload == "done" {
-		    	done = true;
-		    	pubsub.unsubscribe(tgnews_nlu_end)?;
-			    let mut con2 = client.get_connection().unwrap();
-			    let p2:() = con2.publish(tgnews_nlu, "done").unwrap();
-		    }
-	    }
+	    // } 
+	    // else {
+		   //  let msg = pubsub.get_message()?;
+		   //  let payload : String = msg.get_payload()?;
+		   //  if payload == "done" {
+		   //  	done = true;
+		   //  	pubsub.unsubscribe(tgnews_nlu_end)?;
+			  //   let mut con2 = client.get_connection().unwrap();
+			  //   let p2:() = con2.publish(tgnews_nlu, "done").unwrap();
+		   //  }
+	    // }
 	}
 }
 

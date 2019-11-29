@@ -4,6 +4,7 @@ extern crate futures;
 extern crate chrono;
 extern crate redis;
 extern crate json;
+extern crate threadpool;
 
 use chrono::{Utc};
 use std::time::{Instant};
@@ -34,6 +35,7 @@ use std::collections::BTreeMap;
 use futures::join;
 use tantivy::{IndexWriter, doc};
 use tantivy::schema::*;
+use threadpool::ThreadPool;
 
 use super::tgnews_nlu_reply;
 use super::tgnews_nlu_request;
@@ -49,24 +51,27 @@ pub fn visit_dirs(
 	ru_db:Arc<Mutex<Vec<String>>>,
 	names_db:Arc<Mutex<BTreeMap<String, String>>>,
 	_index:Arc<Mutex<IndexWriter>>,
-	_schema:Schema) -> io::Result<()> {
-	let mut pending = vec![];
+	_schema:Schema,
+	_pool:ThreadPool) -> io::Result<()> {
+
+	let pool = ThreadPool::new(8);
     let mut ittr = 0;
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
 	    	ittr += 1;
             let entry = entry?;
 
-            let path = entry.path();
-		    let q = Arc::clone(&queue);
-		    let rus = Arc::clone(&ru_db);
-		    let names = Arc::clone(&names_db);
-		    let index = Arc::clone(&_index);
-		    let schema = _schema.clone();
+            let path 	= entry.path();
+		    let q 		= Arc::clone(&queue);
+		    let rus 	= Arc::clone(&ru_db);
+		    let names 	= Arc::clone(&names_db);
+		    let index 	= Arc::clone(&_index);
+		    let schema 	= _schema.clone();
+		    let p 		= _pool.clone();
             if path.is_dir() {
-			    pending.push(thread::spawn(move || {
-	            	visit_dirs(&path, q, rus, names, index, schema);
-			    }));
+			    pool.execute(move || {
+	            	visit_dirs(&path, q, rus, names, index, schema, p);
+			    });
             } else {
 			    let args: Vec<String> = env::args().collect();
 			    let query = &args[1];
@@ -78,9 +83,7 @@ pub fn visit_dirs(
             }
         }
     }
-    for handle in pending {
-	    let _ = handle.join(); // maybe consider handling errors propagated from the thread here
-	}
+    pool.join();
     Ok(())
 }
 
@@ -97,6 +100,7 @@ pub fn parse_file(entry: &DirEntry,
 
     let path = entry.path();
     let pstr:String = String::from(path.as_path().to_str().unwrap());
+    let psss = pstr.to_string();
 	
 	if query == "debug" {
 		// println!("parsing File {:?}", path);
@@ -130,14 +134,12 @@ pub fn parse_file(entry: &DirEntry,
     let bel = info.lang() == Lang::Bel;
 
     if (eng || rus) && !(spa || por || ita || fra || bel || ukr) {
-	    let client = redis::Client::open("redis://127.0.0.1/")?;
-	    let mut con = client.get_connection()?;
 	    let mut key = "rus";
 	    if eng {
 	    	key = "eng";
 
 			if query == "debug" {
-		    	// println!("{}", &h1);
+		    	// println!("saving file: {}", &h1);
 		    	// println!("language: {}", &key);
 		    	// println!("path: {}", &pstr);
 			}
@@ -151,14 +153,17 @@ pub fn parse_file(entry: &DirEntry,
 	    	"lang" => key
 	    };
 
-	    con.lpush(tgnews_nlu, &lang_data.dump())?;
+	    // REDIS DISABLED TEMPORARY
+	    // let client = redis::Client::open("redis://127.0.0.1/")?;
+	    // let mut con = client.get_connection()?;
+	    // con.lpush(tgnews_nlu, &lang_data.dump())?;
 
 	    let mut lock = queue.try_lock();
 	    if let Ok(ref mut mtx) = lock {
 	        // println!("total queue length: {:?}", mtx.len());
 	       	mtx.push_back(json::parse(&lang_data.dump()).unwrap());
 	    } else {
-	        // println!("parser first try_lock failed");
+	        // println!("parser 1 try_lock failed");
 	    }
 	    drop(lock);
 	    if key == "rus" {
@@ -167,10 +172,11 @@ pub fn parse_file(entry: &DirEntry,
 		        // println!("total queue length: {:?}", mtx.len());
 		       	mtx2.push(pstr);
 		    } else {
-		        // println!("parser second try_lock failed");
+		        // println!("parser 2 try_lock failed");
 		    }
 		    drop(lock2);
 	    }
+
 	    let mut lock3 = names_db.try_lock();
 	    if let Ok(ref mut mtx3) = lock3 {
 	        // println!("total queue length: {:?}", mtx.len())
@@ -178,21 +184,31 @@ pub fn parse_file(entry: &DirEntry,
 	        let h3 = &lang_data["h1"];
 	       	mtx3.insert(h2.to_string().to_lowercase(), h3.to_string().to_lowercase());
 	    } else {
-	        // println!("parser second try_lock failed");
+	        // println!("parser 3 try_lock failed");
 	    }
 	    drop(lock3);
+
         let title = schema.get_field("title").unwrap();
 	    let body = schema.get_field("body").unwrap();
         let h4 = &lang_data["h1"];
-	    let mut lock4 = _index.try_lock();
-	    if let Ok(ref mut writer) = lock4 {
-	    	writer.add_document(doc!(
-			    title => h4.to_string(),
-			    body => "________empty_body_________"
-		    ));
-		    writer.commit();
-	    }
-	    drop(lock4);
+        let mut write4 = false;
+        while write4 == false {
+		    let mut lock4 = _index.try_lock();
+		    if let Ok(ref mut writer) = lock4 {
+		        // println!("parser 4 try_lock success");
+		    	writer.add_document(doc!(
+				    title => h4.to_string(),
+				    body => ""
+			    ));
+			    writer.commit();
+			    write4 = true;
+			    drop(lock4);
+		    }
+		    else {
+			    drop(lock4);
+				thread::sleep(time::Duration::from_nanos(50));
+		    }
+        }
 	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }
     Ok(())
