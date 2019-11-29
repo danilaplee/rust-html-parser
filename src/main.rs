@@ -14,7 +14,7 @@ use std::path::Path;
 use std::env;
 use futures::executor::block_on;
 use redis::Commands;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex,RwLock};
 use std::collections::VecDeque;
 use json::JsonValue;
 use std::sync::mpsc::channel;
@@ -66,9 +66,9 @@ fn main() {
 	let names_db:Arc<Mutex<BTreeMap<String, String>>> = Arc::new(Mutex::new(BTreeMap::new()));
     let args:Vec<String> 						= env::args().collect();
     let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 200);
-    let ws_pool 								= ThreadPool::with_name("ws_pool1".into(), 1);
-    let ws_pool2 								= ThreadPool::with_name("ws_pool2".into(), 1);
-    let ws_pool3 								= ThreadPool::with_name("ws_pool3".into(), 1);
+    let ws_pool 								= ThreadPool::with_name("ws_pool1".into(), 3);
+    let ws_pool2 								= ThreadPool::with_name("ws_pool2".into(), 3);
+    let ws_pool3 								= ThreadPool::with_name("ws_pool3".into(), 3);
     let query	 								= &args[1];
     let filename 								= &args[2];
     let mut bduration 							= Instant::now().elapsed();
@@ -99,9 +99,9 @@ fn main() {
     	&index.set_default_multithread_executor();
     	&index2.set_default_multithread_executor();
     	&index3.set_default_multithread_executor();
-    let index_writer = Arc::new(Mutex::new(index.writer(100_000_000).unwrap()));
-    let index_writer2 = Arc::new(Mutex::new(index2.writer(100_000_000).unwrap()));
-    let index_writer3 = Arc::new(Mutex::new(index3.writer(100_000_000).unwrap()));
+    let index_writer = Arc::new(RwLock::new(index.writer(100_000_000).unwrap()));
+    let index_writer2 = Arc::new(RwLock::new(index2.writer(100_000_000).unwrap()));
+    let index_writer3 = Arc::new(RwLock::new(index3.writer(100_000_000).unwrap()));
     //SETUP DEBUG
 	if query == "debug" {
 
@@ -148,13 +148,25 @@ fn main() {
     	ws_pool2.clone(),
     	Arc::clone(&index_writer2),
     	ws_pool3.clone(),
-    	Arc::clone(&index_writer3)
+    	Arc::clone(&index_writer3),
+    	disable_python
     );
 	fs_pool.join();
 	println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
 	drop(fs_pool);
 	println!("total jobs for ws {}", ws_pool.queued_count());
 	ws_pool.join();
+	ws_pool2.join();
+	ws_pool3.join();
+	let mut index_writer_wlock1 = index_writer.write().unwrap();
+            index_writer_wlock1.commit().unwrap();
+	let mut index_writer_wlock2 = index_writer2.write().unwrap();
+            index_writer_wlock2.commit().unwrap();
+	let mut index_writer_wlock3 = index_writer3.write().unwrap();
+            index_writer_wlock3.commit().unwrap();
+    drop(index_writer_wlock3);
+    drop(index_writer_wlock2);
+    drop(index_writer_wlock1);
 	println!("====================== WriteSystem FINISHED IN {:?} ======================", start.elapsed());
 
 	if query == "languages" {
@@ -229,11 +241,11 @@ fn run_glossaries(
 	db:Arc<Mutex<JsonValue>>,
 	disable_python:bool
 ) {
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
 		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
 }
 
