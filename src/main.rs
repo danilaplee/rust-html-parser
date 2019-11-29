@@ -66,7 +66,7 @@ fn main() {
 	let names_db:Arc<Mutex<BTreeMap<String, String>>> = Arc::new(Mutex::new(BTreeMap::new()));
     let args:Vec<String> 						= env::args().collect();
     let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 200);
-    let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 2);
+    let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 1);
     let query	 								= &args[1];
     let filename 								= &args[2];
     let mut bduration 							= Instant::now().elapsed();
@@ -213,11 +213,11 @@ fn run_glossaries(
 	db:Arc<Mutex<JsonValue>>,
 	disable_python:bool
 ) {
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
+		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
 		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
 }
 

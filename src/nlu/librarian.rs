@@ -22,6 +22,15 @@ use packer::Packer;
 #[packer(source = "glossary")]
 struct Assets;
 
+fn is_double_name(input:String) -> bool {
+	let items = input.split_whitespace();
+	for i in items {
+		if input.matches(i).count() > 1 {
+			return true;
+		}
+	}
+	return false;
+}
 
 pub fn load_sports_glossary() -> Vec<String>  {
 	let keys = [
@@ -158,6 +167,7 @@ pub fn load_games_glossary() -> Vec<String> {
 		let name = ms["name"].to_string();
 		let splt: Vec<&str> = name.split_whitespace().collect();
 		if (&name.len() < &12) 
+		|| is_double_name(name.to_lowercase())
 		|| (name.to_lowercase().contains("the") && splt.len() > 4)
 		|| (name.to_lowercase().contains("years") && splt.len() > 4)
 		|| name.to_lowercase().contains("hong kong") 
