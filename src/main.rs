@@ -68,22 +68,23 @@ fn main() {
     let args:Vec<String> 						= env::args().collect();
     let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 200);
     let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 1);
-    let query	 								= &args[1];
-    let filename 								= &args[2];
     let mut bduration 							= Instant::now().elapsed();
     let mut disable_python 						= true;
-    let matches = App::new("TGNEWS")
+    let matches = App::new("TGNEWS").version("0.7.1")
         .args(&[
             Arg::with_name("query").index(1).help("options are: debug, news, categories, threads, top"),
             Arg::with_name("filename").index(2).help("directory path: ./DataClusteringSample0817/"),
             Arg::with_name("python")
                 .help(r#"enable python neural nets with --python, requires redis running on redis://127.0.0.1"#)
                 .long("python")
+                .short("p")
         ])
         .get_matches();
 	if matches.is_present("python") {
         disable_python = false;
     } 
+    let query	 								= &args[1];
+    let filename 								= &args[2];
 
 	let mut schema_builder = Schema::builder();
 			schema_builder.add_text_field("title", TEXT | STORED);

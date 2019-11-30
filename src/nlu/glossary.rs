@@ -132,7 +132,7 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    let query	 			= &args[1];
 	    let games_scores 		= find_bq_score(index.clone(), schema.clone(), &games, "games");
 	    for (key, items) in bert.entries() {
-	    	println!("listing bert: {:?} , {:?}", &key, &items.len());
+	    	// println!("listing bert: {:?} , {:?}", &key, &items.len());
 	    	let schema_clone = schema.clone();
 	    	let mut itemsref:Vec<String> = [].to_vec();
 	    	for item in items.members() {
@@ -182,7 +182,7 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 							    match retrieved_doc {
 							    	Ok(ref doc) => {
 							    		if tname != "games" {
-										    println!("Found type: {:?} key: {:?} score: {}  doc: {:?}",tname, q, sc, schema.to_json(&doc));
+										    // println!("Found type: {:?} key: {:?} score: {}  doc: {:?}",tname, q, sc, schema.to_json(&doc));
 							    		}
 							    	},
 							    	Err(err) => {
