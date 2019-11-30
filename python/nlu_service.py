@@ -32,6 +32,7 @@ def RedisListener():
             ndata = r.brpop(tgnews_nlu, 5);
             try:
                 data = json.loads(str(ndata[1]))
+                # print("===== python got data =====", data)
                 data['response'] = model([str(data['h1'])])
                 response = json.dumps(data)
                 r.lpush(tgnews_nlu_reply, response);

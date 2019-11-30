@@ -50,6 +50,7 @@ use printer::print_news_start;
 use printer::print_news_end;
 use nlu::run_nlu_service;
 use nlu::wait_for_nlu_completion;
+use nlu::wait_for_nlu_completion_minimal;
 use nlu::process_nlu_data;
 use nlu::run_nlu_listener;
 use nlu::glossary;
@@ -66,9 +67,7 @@ fn main() {
 	let names_db:Arc<Mutex<BTreeMap<String, String>>> = Arc::new(Mutex::new(BTreeMap::new()));
     let args:Vec<String> 						= env::args().collect();
     let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 200);
-    let ws_pool 								= ThreadPool::with_name("ws_pool1".into(), 3);
-    let ws_pool2 								= ThreadPool::with_name("ws_pool2".into(), 3);
-    let ws_pool3 								= ThreadPool::with_name("ws_pool3".into(), 3);
+    let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 1);
     let query	 								= &args[1];
     let filename 								= &args[2];
     let mut bduration 							= Instant::now().elapsed();
@@ -91,21 +90,15 @@ fn main() {
 
 	let mut schema_builder = Schema::builder();
 			schema_builder.add_text_field("title", TEXT | STORED);
-			schema_builder.add_text_field("body", TEXT);
+			schema_builder.add_text_field("body", TEXT | STORED);
     let schema 	= schema_builder.build();
     let mut index = Index::create_in_ram(schema.clone());
-    let mut index2 = Index::create_in_ram(schema.clone());
-    let mut index3 = Index::create_in_ram(schema.clone());
     	&index.set_default_multithread_executor();
-    	&index2.set_default_multithread_executor();
-    	&index3.set_default_multithread_executor();
     let index_writer = Arc::new(RwLock::new(index.writer(100_000_000).unwrap()));
-    let index_writer2 = Arc::new(RwLock::new(index2.writer(100_000_000).unwrap()));
-    let index_writer3 = Arc::new(RwLock::new(index3.writer(100_000_000).unwrap()));
     //SETUP DEBUG
 	if query == "debug" {
 
-	    println!("=============== RUNNING TGNEWS v0.5.1 ===============");
+	    println!("=============== RUNNING TGNEWS v0.7.1 ===============");
 	    println!("=============== START TIME {} ===============", Utc::now());
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
@@ -145,29 +138,18 @@ fn main() {
     	schema.clone(), 
     	fs_pool.clone(), 
     	ws_pool.clone(), 
-    	ws_pool2.clone(),
-    	Arc::clone(&index_writer2),
-    	ws_pool3.clone(),
-    	Arc::clone(&index_writer3),
     	disable_python
     );
 	fs_pool.join();
-	println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
 	drop(fs_pool);
-	println!("total jobs for ws {}", ws_pool.queued_count());
+	if query == "debug" {
+		println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
+		println!("total jobs for ws {}", ws_pool.queued_count());
+	}
 	ws_pool.join();
-	ws_pool2.join();
-	ws_pool3.join();
-	let mut index_writer_wlock1 = index_writer.write().unwrap();
-            index_writer_wlock1.commit().unwrap();
-	let mut index_writer_wlock2 = index_writer2.write().unwrap();
-            index_writer_wlock2.commit().unwrap();
-	let mut index_writer_wlock3 = index_writer3.write().unwrap();
-            index_writer_wlock3.commit().unwrap();
-    drop(index_writer_wlock3);
-    drop(index_writer_wlock2);
-    drop(index_writer_wlock1);
-	println!("====================== WriteSystem FINISHED IN {:?} ======================", start.elapsed());
+	let mut index_writer_wlock = index_writer.write().unwrap();
+            index_writer_wlock.commit().unwrap();
+	    drop(index_writer_wlock);
 
 	if query == "languages" {
 		print_languages_end(Arc::clone(&ru_db));
@@ -175,6 +157,7 @@ fn main() {
 	}
 
 	if query == "debug" {
+		println!("====================== WriteSystem FINISHED IN {:?} ======================", start.elapsed());
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
 		println!("====================== WAITING FOR NLU COMPLETION ======================");
@@ -185,12 +168,8 @@ fn main() {
 		}
 		drop(lock0);
 		let _index = Arc::new(Mutex::new(index));
-		let _index2 = Arc::new(Mutex::new(index2));
-		let _index3 = Arc::new(Mutex::new(index3));
 		let bq_service = glossary::start_bigquery_service(
 			Arc::clone(&_index), 
-			Arc::clone(&_index2), 
-			Arc::clone(&_index3), 
 			Arc::clone(&category_db), 
 			schema.clone()
 		);
@@ -199,8 +178,12 @@ fn main() {
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
-
-		block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
+		if !disable_python {
+			block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
+		}
+		else {
+			block_on(wait_for_nlu_completion_minimal(Arc::clone(&gQueue), disable_python));
+		}
 		//COUNT PERFORMANCE
 		let end_time = Utc::now();
 		let duration = start.elapsed();

@@ -54,14 +54,13 @@ pub fn visit_dirs(
 	_schema:Schema,
 	_pool:ThreadPool,
 	ipool:ThreadPool,
-	ipool2:ThreadPool,
-	_index2:Arc<RwLock<IndexWriter>>,
-	ipool3:ThreadPool,
-	_index3:Arc<RwLock<IndexWriter>>,
 	python_disabled:bool,
 	) -> io::Result<()> {
     let mut ittr = 0;
-    let data = json::JsonValue::new_array();
+    let data 	= json::JsonValue::new_array();
+    let client 	= redis::Client::open("redis://0.0.0.0/").unwrap();
+    let con 	= client.get_connection();
+	let conn 	= Arc::new(Mutex::new(con.unwrap()));
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
 	    	ittr += 1;
@@ -75,14 +74,14 @@ pub fn visit_dirs(
 		    let p 		= _pool.clone();
 		    let ip 		= ipool.clone();
 		    let index 	= Arc::clone(&_index);
-		    let ip2 	= ipool2.clone();
-		    let index2 	= Arc::clone(&_index2);
-		    let ip3 	= ipool3.clone();
-		    let index3 	= Arc::clone(&_index3);
+		    // let ip2 	= ipool2.clone();
+		    // let index2 	= Arc::clone(&_index2);
+		    // let ip3 	= ipool3.clone();
+		    // let index3 	= Arc::clone(&_index3);
 
             if path.is_dir() {
 			    _pool.execute(move || {
-	            	visit_dirs(&path, q, rus, names, index, schema, p, ip, ip2, index2, ip3, index3, python_disabled);
+	            	visit_dirs(&path, q, rus, names, index, schema, p, ip, python_disabled);
 			    });
             } else {
 			    let args: Vec<String> = env::args().collect();
@@ -103,7 +102,17 @@ pub fn visit_dirs(
 				   //  	ci = index3.clone();
 			    // 	}
 			    // }
-	            match parse_file(&entry, q, rus, names, ci, schema, cp, python_disabled) {
+	            match parse_file(
+	            	&entry, 
+	            	q, 
+	            	rus, 
+	            	names, 
+	            	ci, 
+	            	schema, 
+	            	cp, 
+	            	python_disabled, 
+	            	conn.clone()
+	            ) {
 		            Result::Ok(val) => val,
 		            Result::Err(err) => (),
 	            }
@@ -121,7 +130,8 @@ pub fn parse_file(entry: &DirEntry,
 	_index:Arc<RwLock<IndexWriter>>,
 	schema:Schema,
 	_pool:ThreadPool,
-	python_disabled:bool) -> Result<(), Box<dyn std::error::Error + 'static>> {
+	python_disabled:bool,
+	redis_conn:Arc<Mutex<redis::Connection>>) -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
@@ -180,14 +190,8 @@ pub fn parse_file(entry: &DirEntry,
 	    	"path" => json::JsonValue::String(pstr.to_string()),
 	    	"lang" => key
 	    };
-
 	    _pool.execute(move || {
 
-		    if !python_disabled {
-			    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-			    let mut con = client.get_connection().unwrap();
-			    let _ : () = con.lpush(tgnews_nlu, &lang_data.dump()).unwrap();
-		    }
 
 		    let mut lock = queue.try_lock();
 		    if let Ok(ref mut mtx) = lock {
@@ -226,12 +230,10 @@ pub fn parse_file(entry: &DirEntry,
 	        while write4 == false {
 			    let lock4 = _index.read();
 			    if let Ok(ref writer) = lock4 {
-			        // println!("parser 4 try_lock success");
 			    	writer.add_document(doc!(
 					    title => h4.to_string(),
-					    body => ""
+					    body => lang_data["path"].to_string()
 				    ));
-				    // writer.commit();
 				    write4 = true;
 				    drop(lock4);
 			    }
@@ -240,6 +242,20 @@ pub fn parse_file(entry: &DirEntry,
 					thread::sleep(time::Duration::from_nanos(1));
 			    }
 	        }
+		    if !python_disabled {
+				// thread::sleep(time::Duration::from_millis(1));
+				let rlock = redis_conn.try_lock();
+			    match rlock {
+			    	Ok(mut con) => {
+					    let _ : () = con.lpush(tgnews_nlu, &lang_data.dump()).unwrap();
+					    drop(con);
+			    	},
+			    	Err(err) => {
+			    		println!("redis conn error {:?}", err);
+					    drop(err);
+			    	}
+			    }
+		    }
 	    });
 	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }

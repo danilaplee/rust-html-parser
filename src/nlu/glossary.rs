@@ -41,9 +41,8 @@ pub fn start(
 	db:Arc<Mutex<JsonValue>>,
 	offset:u64
 ) {
-	// test_fuzzy();
     thread::spawn(move || {
-		// let games:Vec<String> 	= librarian::load_games_glossary();
+		let games:Vec<String> 	= librarian::load_games_glossary();
 	    let args: Vec<String> = env::args().collect();
 	    let query	 = &args[1];
 
@@ -73,7 +72,7 @@ pub fn start(
 				+&art.len()
 				+&terror.len()
 				+&ops.len()
-				// +&games.len()
+				+&games.len()
 			);
 		}
 		let mut not_finished = true;
@@ -124,27 +123,13 @@ pub fn start(
     });
 }
 
-pub fn start_bigquery_service(index1:Arc<Mutex<Index>>,index2:Arc<Mutex<Index>>,index3:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema) {
-    let pool = ThreadPool::with_name("bq_pool2".into(), 3);
-    let schema_clone = schema.clone();
-    let schema_clone2 = schema.clone();
+pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema) {
+    let pool = ThreadPool::with_name("bq_pool1".into(), 1);
     pool.execute(move || {
 		let games:Vec<String> 	= librarian::load_games_glossary();
 	    let args: Vec<String> 	= env::args().collect();
 	    let query	 			= &args[1];
-	    let games_scores 		= find_bq_score(index1, schema_clone, &games, "games");
-	});
-	pool.execute(move || {
-		let games:Vec<String> 	= librarian::load_games_glossary();
-	    let args: Vec<String> 	= env::args().collect();
-	    let query	 			= &args[1];
-	    let games_scores 		= find_bq_score(index2, schema_clone2, &games, "games");
-	});
-	pool.execute(move || {
-		let games:Vec<String> 	= librarian::load_games_glossary();
-	    let args: Vec<String> 	= env::args().collect();
-	    let query	 			= &args[1];
-	    let games_scores 		= find_bq_score(index3, schema.clone(), &games, "games");
+	    let games_scores 		= find_bq_score(index, schema.clone(), &games, "games");
 	});
 	pool.join();
 }
@@ -185,10 +170,11 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 							    let retrieved_doc = searcher.doc(doc_address);
 							    match retrieved_doc {
 							    	Ok(ref doc) => {
-									    println!("Found key: {:?} score: {}  doc: {:?}",q, sc, schema.to_json(&doc));
+
+									    // println!("Found key: {:?} score: {}  doc: {:?}",q, sc, schema.to_json(&doc));
 							    	},
 							    	Err(err) => {
-								    	println!("Found Game News with  but error: {:?}", &err);
+								    	// println!("Found Game News with  but error: {:?}", &err);
 
 							    	}
 							    }
