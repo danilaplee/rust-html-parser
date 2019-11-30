@@ -454,6 +454,12 @@ pub fn load_gov_glossary() -> Vec<String> {
 	return ndata;
 }
 
+pub fn load_bert_dict() -> json::JsonValue {
+	let data = get_required_assets(["glossary/bert-dict.json"].to_vec());
+	let d = json::parse(&data["glossary/bert-dict.json"].to_string()).unwrap();
+	return d;
+}
+
 pub fn get_required_assets(keys:Vec<&str>) -> json::JsonValue {
 	let files = Assets::list();
 	let mut data = json::JsonValue::new_object();

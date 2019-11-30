@@ -71,17 +71,14 @@ fn main() {
     let query	 								= &args[1];
     let filename 								= &args[2];
     let mut bduration 							= Instant::now().elapsed();
-    let mut disable_python = true;
+    let mut disable_python 						= true;
     let matches = App::new("TGNEWS")
         .args(&[
             Arg::with_name("query").index(1).help("options are: debug, news, categories, threads, top"),
             Arg::with_name("filename").index(2).help("directory path: ./DataClusteringSample0817/"),
             Arg::with_name("python")
-                .help("enable python neural nets with --python")
-                .long("python"),
-            Arg::with_name("redis")
-                .help(r#"enable redis cache with --redis="""#)
-                .long("redis")
+                .help(r#"enable python neural nets with --python, requires redis running on redis://127.0.0.1"#)
+                .long("python")
         ])
         .get_matches();
 	if matches.is_present("python") {

@@ -127,9 +127,19 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
     let pool = ThreadPool::with_name("bq_pool1".into(), 1);
     pool.execute(move || {
 		let games:Vec<String> 	= librarian::load_games_glossary();
+		let bert 				= librarian::load_bert_dict();
 	    let args: Vec<String> 	= env::args().collect();
 	    let query	 			= &args[1];
-	    let games_scores 		= find_bq_score(index, schema.clone(), &games, "games");
+	    let games_scores 		= find_bq_score(index.clone(), schema.clone(), &games, "games");
+	    for (key, items) in bert.entries() {
+	    	println!("listing bert: {:?} , {:?}", &key, &items.len());
+	    	let schema_clone = schema.clone();
+	    	let mut itemsref:Vec<String> = [].to_vec();
+	    	for item in items.members() {
+	    		itemsref.push(item.to_string());
+	    	}
+	    	let score = find_bq_score(index.clone(), schema_clone, &itemsref, &key);
+	    }
 	});
 	pool.join();
 }
@@ -141,13 +151,10 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 	let mut _score = 0;
     let mut j 	= object!{};
     let mut lock_sucess = false;
-    // println!("========== start lock =========");
     let mut lock = _index.try_lock();
     while !lock_sucess {
 	    if let Ok(ref index) = lock {
-	    	// println!("======== lock success ========");
 	    	let reader = index.reader().unwrap();
-	    	// println!("======== got reader success ========");
 			let searcher = reader.searcher();
 
 	        let title = schema.get_field("title").unwrap();
@@ -166,12 +173,17 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 					    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
 
 						for (sc, doc_address) in top_docs {
-							if sc >= 15 as f32 {
+							let mut min_score = 15;
+							if tname != "games" {
+								min_score = 10;
+							}
+							if sc >= min_score as f32 {
 							    let retrieved_doc = searcher.doc(doc_address);
 							    match retrieved_doc {
 							    	Ok(ref doc) => {
-
-									    // println!("Found key: {:?} score: {}  doc: {:?}",q, sc, schema.to_json(&doc));
+							    		if tname != "games" {
+										    println!("Found type: {:?} key: {:?} score: {}  doc: {:?}",tname, q, sc, schema.to_json(&doc));
+							    		}
 							    	},
 							    	Err(err) => {
 								    	// println!("Found Game News with  but error: {:?}", &err);
