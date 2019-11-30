@@ -226,36 +226,12 @@ pub fn parse_file(entry: &DirEntry,
 			    }
 	        }
 		    if !python_disabled {
-				// thread::sleep(time::Duration::from_millis(1));
 				let mut rlock = redis_conn.lock().unwrap();
 				let con:&mut redis::Connection = rlock.as_mut().unwrap();
 				let _ : () = con.lpush(tgnews_nlu, &lang_data.dump()).unwrap();
-				// if let Ok(ref mut con) = rlock {
-				// 	if con == None {
-				// 		return;
-				// 	}
-				// 	else {
-				// 	}
-				// }
 			    drop(rlock);
-			    // match rlock {
-			    // 	Ok(ref mut con) => {
-
-			    // 		match con {
-			    // 			Ok(ref mut c) => {
-							//     let _ : () = c.lpush(tgnews_nlu, &lang_data.dump()).unwrap();
-			    // 			}
-			    // 		}
-					  //   drop(con);
-			    // 	},
-			    // 	Err(err) => {
-			    // 		println!("redis conn error {:?}", err);
-					  //   drop(err);
-			    // 	}
-			    // }
 		    }
 	    });
-	    // println!("total size of queue: {:?}", queue.add_work(&lang_data));
     }
     Ok(())
 
