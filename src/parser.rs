@@ -153,8 +153,21 @@ pub fn parse_file(entry: &DirEntry,
     let fra = info.lang() == Lang::Fra;
     let ukr = info.lang() == Lang::Ukr;
     let bel = info.lang() == Lang::Bel;
+    let epo = info.lang() == Lang::Epo;
+    let deu = info.lang() == Lang::Deu;
+    let arb = info.lang() == Lang::Arb;
+    let hin = info.lang() == Lang::Hin;
+    let kat = info.lang() == Lang::Kat;
+    let jpn = info.lang() == Lang::Jpn;
+    let ces = info.lang() == Lang::Ces;
+    let ind = info.lang() == Lang::Ind;
+    let pan = info.lang() == Lang::Pan;
+    let tha = info.lang() == Lang::Tha;
+    let lav = info.lang() == Lang::Lav;
+    let est = info.lang() == Lang::Est;
 
-    if (eng || rus) && !(spa || por || ita || fra || bel || ukr) {
+    if (eng || rus) && !(spa || por || ita || fra || bel 
+    	|| ukr || deu || epo || arb || hin || kat || jpn || ces || ind || pan || tha || lav || est) {
 	    let mut key = "rus";
 	    if eng {
 	    	key = "eng";
@@ -200,7 +213,7 @@ pub fn parse_file(entry: &DirEntry,
 		        // println!("total queue length: {:?}", mtx.len())
 		        let h2 = &lang_data["h1"];
 		        let h3 = &lang_data["h1"];
-		       	mtx3.insert(h2.to_string().to_lowercase(), h3.to_string().to_lowercase());
+		       	mtx3.insert(h2.to_string(), h3.to_string());
 		    } else {
 		        // println!("parser 3 try_lock failed");
 		    }

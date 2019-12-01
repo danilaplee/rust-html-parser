@@ -1,6 +1,6 @@
 [package]
 name = "tgnews"
-version = "0.7.1"
+version = "0.7.9"
 authors = ["Danila Plee <fiend.of.sound@gmail.com>"]
 edition = "2018"
 

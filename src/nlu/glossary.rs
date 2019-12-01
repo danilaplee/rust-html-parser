@@ -35,13 +35,13 @@ use super::librarian;
 // Science (includes Health, Biology, Physics, Genetics)
 // Other (news articles that don't fall into any of the above categories)
 
-pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema, query:String) {
+pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema, query:String, names_db:Arc<Mutex<BTreeMap<String, String>>>) {
     let pool = ThreadPool::with_name("bq_pool1".into(), 1);
     pool.execute(move || {
 		let gamesg 				= librarian::load_games_glossary();
 		let bert 				= librarian::load_bert_dict();
 		let sportsg				= librarian::load_sports_glossary();
-		let etvg 				= librarian::load_etv_glossary();
+		let tvg 				= librarian::load_etv_glossary();
 		let corpg 				= librarian::load_corp_glossary();
 		let scienceg 			= librarian::load_science_glossary();
 		let medicineg 			= librarian::load_medicine_glossary();
@@ -62,6 +62,7 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    let music 				= find_bq_score(index.clone(), schema.clone(), &musicg, "music");
 	    let book 				= find_bq_score(index.clone(), schema.clone(), &bookg, "book");
 	    let terror 				= find_bq_score(index.clone(), schema.clone(), &terrorg, "terror");
+	    let tv 					= find_bq_score(index.clone(), schema.clone(), &tvg, "tv");
 	    let mut json 			= object!{};
 	    let mut news 			= object!{"articles"=>json::JsonValue::new_array()};
 	    let mut categories 		= json::JsonValue::new_array();
@@ -108,6 +109,7 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    	let ibook  = !(book[path].is_null());
 	    	let iscience  = !(science[path].is_null());
 	    	let imedicine  = !(medicine[path].is_null());
+	    	let itv  = !(tv[path].is_null());
 
 	    	let mut is_news:bool = false;
 			
@@ -124,7 +126,7 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 			}
 
 			//TECH
-			if (itech && icorp) {
+			if itech && (icorp || org) {
 				is_news = true;
 				categories[2]["articles"].push(path);
 			}
@@ -136,7 +138,7 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 			}
 
 			//ENTERTAINMENT
-			if art || igames || imusic || ibook  {
+			if art || igames || imusic || ibook || itv  {
 				is_news = true;
 				categories[4]["articles"].push(path);
 			}
@@ -164,6 +166,34 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    if query == "categories" {
 	    	println!("{}", categories.pretty(2));
 	    }
+
+	    if query == "threads"
+	    || query == "top"
+	    || query == "debug" {
+		    let self_occurences = find_self_occurences(index.clone(), schema.clone(), names_db);
+	    	let mut thr = json::JsonValue::new_array();
+
+		    for (path, items) in self_occurences.entries() {
+		    	if items.len() < 2 {
+		    		continue;
+		    	}
+		    	else {
+		    		let mut articles = object!{
+				    	"title" => path,
+				    	"articles" => json::JsonValue::new_array()
+				    };
+				    for i in items.members() {
+				    	let ii = i.to_string();
+				    	articles["articles"].push(ii);
+				    }
+		    		thr.push(articles);
+		    	}
+		    }
+		    if query == "threads" {
+		    	println!("{}", thr.pretty(2));
+		    }
+	    }
+
 
 
 	});
@@ -225,6 +255,75 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 				}
 			}
 			lock_sucess = true;
+			drop(&lock);
+		}
+		else {
+			thread::sleep(time::Duration::from_nanos(10000));
+			drop(&lock);
+		}
+    }
+	return j;
+}
+
+fn find_self_occurences(_index:Arc<Mutex<Index>>, schema:Schema, names_db:Arc<Mutex<BTreeMap<String, String>>>) -> JsonValue {
+	let args: Vec<String> = env::args().collect();
+	let query	 = &args[1];
+	let mut _score = 0;
+    let mut j 	= object!{};
+    let mut lock_sucess = false;
+    let mut lock = _index.try_lock();
+    while !lock_sucess {
+	    if let Ok(ref index) = lock {
+	    	let reader = index.reader().unwrap();
+			let searcher = reader.searcher();
+
+	        let title = schema.get_field("title").unwrap();
+		    let body = schema.get_field("body").unwrap();
+
+			let query_parser = QueryParser::for_index(&index, vec![title, body]);
+			// let names = names_db.try_lock().unwrap();
+
+		    let mut lock2 = names_db.try_lock();
+		    if let Ok(ref names) = lock2 {
+		    	let n:&BTreeMap<String, String> = names; 
+				for (word, _) in n {
+					let q:&str = word.as_str();
+					let query = query_parser.parse_query(q);
+				    match query {
+				    	Ok(query) => {
+							let top_docs: Vec<(Score, DocAddress)> =
+						    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
+
+							for (sc, doc_address) in top_docs {
+								let mut min_score = 25;
+								if sc >= min_score as f32 {
+								    let retrieved_doc = searcher.doc(doc_address);
+								    match retrieved_doc {
+								    	Ok(ref doc) => {
+								    		let mut js = json::parse(&schema.to_json(&doc)).unwrap();
+								    		let keystr = js["body"][0].to_string();
+								    		js["score"] = sc.into();
+								    		js["occurence"] = word.to_string().into();
+								    		if j[q].is_null() {
+								    			j[q] = json::JsonValue::new_array()
+								    		}
+								    		j[q].push(keystr);
+								    	},
+								    	Err(err) => {
+
+								    	}
+								    }
+								}
+					    	}
+					    },
+				    	Err(err) => {
+					    	// println!("query parsing error: {:?}", &err);
+					    	continue;
+				    	}
+					}
+				}
+				lock_sucess = true;
+			}
 			drop(&lock);
 		}
 		else {

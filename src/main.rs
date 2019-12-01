@@ -64,7 +64,7 @@ fn main() {
 	let done_index:Arc<Mutex<Vec<String>>> 		= Arc::new(Mutex::new(Vec::new()));
 	let category_db:Arc<Mutex<JsonValue>> 		= Arc::new(Mutex::new(json::JsonValue::new_object()));
 	let gQueue:Arc<Mutex<VecDeque<JsonValue>>> 	= Arc::new(Mutex::new(VecDeque::new()));
-	let names_db:Arc<Mutex<BTreeMap<String, String>>> = Arc::new(Mutex::new(BTreeMap::new()));
+	let names_db 								= Arc::new(Mutex::new(BTreeMap::new()));
     let args:Vec<String> 						= env::args().collect();
     let fs_pool 								= ThreadPool::with_name("fs_pool".into(), 200);
     let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 1);
@@ -96,7 +96,7 @@ fn main() {
     //SETUP DEBUG
 	if query == "debug" {
 
-	    println!("=============== RUNNING TGNEWS v0.7.1 ===============");
+	    println!("=============== RUNNING TGNEWS v0.7.9 ===============");
 	    println!("=============== START TIME {} ===============", Utc::now());
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);
@@ -136,13 +136,14 @@ fn main() {
 	    drop(index_writer_wlock);
 
 	//SETUP NEWS
-	if query == "news" || query == "debug" || query == "categories" {
+	if query != "languages" {
 		let _index = Arc::new(Mutex::new(index));
 		let bq_service = glossary::start_bigquery_service(
 			Arc::clone(&_index), 
 			Arc::clone(&category_db), 
 			schema.clone(),
-			query.to_string()
+			query.to_string(),
+			Arc::clone(&names_db)
 		);
 
 	    if disable_python == false {
