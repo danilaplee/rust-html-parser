@@ -72,7 +72,7 @@ fn main() {
     let mut disable_python 						= true;
     let matches = App::new("TGNEWS").version("0.7.1")
         .args(&[
-            Arg::with_name("query").index(1).help("options are: debug, news, categories, threads, top"),
+            Arg::with_name("query").index(1).help("options are: debug, languages, news, categories, threads, top"),
             Arg::with_name("filename").index(2).help("directory path: ./DataClusteringSample0817/"),
             Arg::with_name("python")
                 .help(r#"enable python neural nets with --python, requires redis running on redis://127.0.0.1"#)
@@ -103,7 +103,6 @@ fn main() {
 	    if disable_python == false {
 		    run_nlu_service();
 	    }
-	    run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&category_db), disable_python);
 	    println!("python && glosary setup done");
 	    bduration = bstart.elapsed();
 	    println!("total boot time: {:?}", bduration);
@@ -114,14 +113,6 @@ fn main() {
 		print_languages_start();
 	}
 
-	//SETUP NEWS
-	if query == "news" {
-		print_news_start();
-		run_glossaries(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&category_db), disable_python);
-	    if disable_python == false {
-		    run_nlu_service();
-	    }
-	}
     
 
     //START DIRS
@@ -139,15 +130,25 @@ fn main() {
     	disable_python
     );
 	fs_pool.join();
-	drop(fs_pool);
-	if query == "debug" {
-		println!("====================== FileSystem FINISHED IN {:?} ======================", start.elapsed());
-		println!("total jobs for ws {}", ws_pool.queued_count());
-	}
 	ws_pool.join();
 	let mut index_writer_wlock = index_writer.write().unwrap();
             index_writer_wlock.commit().unwrap();
 	    drop(index_writer_wlock);
+
+	//SETUP NEWS
+	if query == "news" || query == "debug" || query == "categories" {
+		let _index = Arc::new(Mutex::new(index));
+		let bq_service = glossary::start_bigquery_service(
+			Arc::clone(&_index), 
+			Arc::clone(&category_db), 
+			schema.clone(),
+			query.to_string()
+		);
+
+	    if disable_python == false {
+		    run_nlu_service();
+	    }
+	}
 
 	if query == "languages" {
 		print_languages_end(Arc::clone(&ru_db));
@@ -165,23 +166,11 @@ fn main() {
 		    println!("total items in names : {:?}", mtx.len());
 		}
 		drop(lock0);
-		let _index = Arc::new(Mutex::new(index));
-		let bq_service = glossary::start_bigquery_service(
-			Arc::clone(&_index), 
-			Arc::clone(&category_db), 
-			schema.clone()
-		);
-		println!("====================== BTREE FINISHED IN {:?} ======================", start.elapsed());
+		println!("====================== INDEX FINISHED IN {:?} ======================", start.elapsed());
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
 		println!("====================== FINISHED BTREE ======================");
-		if !disable_python {
-			block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
-		}
-		else {
-			block_on(wait_for_nlu_completion_minimal(Arc::clone(&gQueue), disable_python));
-		}
 		//COUNT PERFORMANCE
 		let end_time = Utc::now();
 		let duration = start.elapsed();
@@ -197,8 +186,12 @@ fn main() {
 	}
 	//SETUP NEWS
 	if query == "news" {
-		block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
-		print_news_end();
+		if !disable_python {
+			block_on(wait_for_nlu_completion(Arc::clone(&gQueue), disable_python));
+		}
+		else {
+			block_on(wait_for_nlu_completion_minimal(Arc::clone(&gQueue), disable_python));
+		}
 	}
 }
 fn delete_set(con: &mut redis::Connection, ntype: String) -> redis::RedisResult<()> {

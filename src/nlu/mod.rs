@@ -91,18 +91,18 @@ pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>, no_p
 	pubsub.subscribe(tgnews_nlu_end);
 	loop {
 	    if done {
-		    let mut lock = queue.try_lock();
-		    if let Ok(ref mut mtx) = lock {
-		        println!("total queue length: {:?}", mtx.len());
-		        if mtx.len() == 0 {
+		    // let mut lock = queue.try_lock();
+		    // if let Ok(ref mut mtx) = lock {
+		    //     println!("total queue length: {:?}", mtx.len());
+		    //     if mtx.len() == 0 {
 		        	return Ok(());
-		        }
-		    } else {
-		        println!("completion try_lock failed");
-		    }
-		    drop(lock);
-		    let _millis = time::Duration::from_millis(1000);
-			thread::sleep(_millis);
+		 //        }
+		 //    } else {
+		 //        println!("completion try_lock failed");
+		 //    }
+		 //    drop(lock);
+		 //    let _millis = time::Duration::from_millis(1000);
+			// thread::sleep(_millis);
 	    } 
 	    else {
 		    let msg = pubsub.get_message()?;
@@ -118,20 +118,20 @@ pub async fn wait_for_nlu_completion(queue:Arc<Mutex<VecDeque<JsonValue>>>, no_p
 }
 pub async fn wait_for_nlu_completion_minimal(queue:Arc<Mutex<VecDeque<JsonValue>>>, no_python:bool) -> Result<(), Box<dyn std::error::Error + 'static>>   {
 	
-	loop {
-		    let mut lock = queue.try_lock();
-		    if let Ok(ref mut mtx) = lock {
-		        println!("total queue length: {:?}", mtx.len());
-		        if mtx.len() == 0 {
+	// loop {
+		    // let mut lock = queue.try_lock();
+		    // if let Ok(ref mut mtx) = lock {
+		    //     println!("total queue length: {:?}", mtx.len());
+		    //     if mtx.len() == 0 {
 		        	return Ok(());
-		        }
-		    } else {
-		        println!("completion try_lock failed");
-		    }
-		    drop(lock);
-		    let _millis = time::Duration::from_millis(1000);
-			thread::sleep(_millis);
-	}
+		 //        }
+		 //    } else {
+		 //        println!("completion try_lock failed");
+		 //    }
+		 //    drop(lock);
+		 //    let _millis = time::Duration::from_millis(1000);
+			// thread::sleep(_millis);
+	// }
 }
 
 pub fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
