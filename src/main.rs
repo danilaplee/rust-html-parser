@@ -209,17 +209,3 @@ fn get_set(con: &mut redis::Connection, ntype: &String) -> redis::RedisResult<()
     Ok(())
 }
 
-fn run_glossaries(
-	done_index:Arc<Mutex<Vec<String>>>, 
-	gQueue:Arc<Mutex<VecDeque<JsonValue>>>,
-	db:Arc<Mutex<JsonValue>>,
-	disable_python:bool
-) {
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 1);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 2);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 3);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 4);
-		// glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 5);
-		glossary::start(Arc::clone(&done_index), Arc::clone(&gQueue), Arc::clone(&db), 11);
-}
-
