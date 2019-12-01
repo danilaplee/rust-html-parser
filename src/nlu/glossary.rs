@@ -272,6 +272,7 @@ fn find_self_occurences(_index:Arc<Mutex<Index>>, schema:Schema, names_db:Arc<Mu
     let mut j 	= object!{};
     let mut lock_sucess = false;
     let mut lock = _index.try_lock();
+    let mut reverse_map = BTreeMap::new();
     while !lock_sucess {
 	    if let Ok(ref index) = lock {
 	    	let reader = index.reader().unwrap();
@@ -281,19 +282,20 @@ fn find_self_occurences(_index:Arc<Mutex<Index>>, schema:Schema, names_db:Arc<Mu
 		    let body = schema.get_field("body").unwrap();
 
 			let query_parser = QueryParser::for_index(&index, vec![title, body]);
-			// let names = names_db.try_lock().unwrap();
 
 		    let mut lock2 = names_db.try_lock();
 		    if let Ok(ref names) = lock2 {
 		    	let n:&BTreeMap<String, String> = names; 
 				for (word, _) in n {
+					if reverse_map.contains_key(word) {
+						continue;
+					}
 					let q:&str = word.as_str();
 					let query = query_parser.parse_query(q);
 				    match query {
 				    	Ok(query) => {
 							let top_docs: Vec<(Score, DocAddress)> =
 						    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
-
 							for (sc, doc_address) in top_docs {
 								let mut min_score = 25;
 								if sc >= min_score as f32 {
@@ -301,11 +303,12 @@ fn find_self_occurences(_index:Arc<Mutex<Index>>, schema:Schema, names_db:Arc<Mu
 								    match retrieved_doc {
 								    	Ok(ref doc) => {
 								    		let mut js = json::parse(&schema.to_json(&doc)).unwrap();
+										    reverse_map.insert(js["title"][0].to_string(), js["body"][0].to_string());
 								    		let keystr = js["body"][0].to_string();
 								    		js["score"] = sc.into();
 								    		js["occurence"] = word.to_string().into();
 								    		if j[q].is_null() {
-								    			j[q] = json::JsonValue::new_array()
+								    			j[q] = json::JsonValue::new_array();
 								    		}
 								    		j[q].push(keystr);
 								    	},
