@@ -5,7 +5,9 @@ extern crate chrono;
 extern crate redis;
 extern crate json;
 extern crate threadpool;
+extern crate regex;
 
+use regex::Regex;
 use chrono::{Utc};
 use std::time::{Instant};
 use std::io;
@@ -167,7 +169,8 @@ pub fn parse_file(entry: &DirEntry,
     let est = info.lang() == Lang::Est;
 
     if (eng || rus) && !(spa || por || ita || fra || bel 
-    	|| ukr || deu || epo || arb || hin || kat || jpn || ces || ind || pan || tha || lav || est) {
+    	|| ukr || deu || epo || arb || hin || kat || jpn 
+    	|| ces || ind || pan || tha || lav || est) {
 	    let mut key = "rus";
 	    if eng {
 	    	key = "eng";
@@ -188,8 +191,8 @@ pub fn parse_file(entry: &DirEntry,
 	    };
 	    _pool.execute(move || {
 
-
 		    let mut lock = queue.try_lock();
+
 		    if let Ok(ref mut mtx) = lock {
 		        // println!("total queue length: {:?}", mtx.len());
 		       	mtx.push_back(json::parse(&lang_data.dump()).unwrap());
@@ -211,8 +214,9 @@ pub fn parse_file(entry: &DirEntry,
 		    let mut lock3 = names_db.try_lock();
 		    if let Ok(ref mut mtx3) = lock3 {
 		        // println!("total queue length: {:?}", mtx.len())
-		        let h2 = &lang_data["h1"];
-		        let h3 = &lang_data["h1"];
+				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+		        let h2 = re.replace_all(&lang_data["h1"].to_string(), "").to_string();
+		        let h3 = re.replace_all(&lang_data["h1"].to_string(), "").to_string();
 		       	mtx3.insert(h2.to_string(), h3.to_string());
 		    } else {
 		        // println!("parser 3 try_lock failed");
@@ -226,8 +230,10 @@ pub fn parse_file(entry: &DirEntry,
 	        while write4 == false {
 			    let lock4 = _index.read();
 			    if let Ok(ref writer) = lock4 {
+
+					let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
 			    	writer.add_document(doc!(
-					    title => h4.to_string(),
+					    title => re.replace_all(&h4.to_string(), "").to_string(),
 					    body => lang_data["path"].to_string()
 				    ));
 				    write4 = true;

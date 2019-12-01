@@ -1,6 +1,9 @@
 extern crate redis;
+extern crate regex;
+use regex::Regex;
 use json::JsonValue;
 use json::object;
+use json::array;
 use std::fs::{self, DirEntry, File};
 use std::path::{PathBuf, Path};
 use std::env;
@@ -35,7 +38,13 @@ use super::librarian;
 // Science (includes Health, Biology, Physics, Genetics)
 // Other (news articles that don't fall into any of the above categories)
 
-pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>, schema:Schema, query:String, names_db:Arc<Mutex<BTreeMap<String, String>>>) {
+pub fn start_bigquery_service(
+	index:Arc<Mutex<Index>>, 
+	db:Arc<Mutex<JsonValue>>, 
+	schema:Schema, 
+	query:String, 
+	names_db:Arc<Mutex<BTreeMap<String, String>>>
+) {
     let pool = ThreadPool::with_name("bq_pool1".into(), 1);
     pool.execute(move || {
 		let gamesg 				= librarian::load_games_glossary();
@@ -66,13 +75,28 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    let mut json 			= object!{};
 	    let mut news 			= object!{"articles"=>json::JsonValue::new_array()};
 	    let mut categories 		= json::JsonValue::new_array();
+	    let mut ncategories:BTreeMap<String, String> 	= BTreeMap::new();
 	    let mut graph 			= object!{};
 	    let ctypes 				= ["society", "economy", "technology", "sports", "entertainment", "science", "other"].to_vec();
-	    for ct in ctypes {
+	    let mut ctypestree:BTreeMap<String, usize> = BTreeMap::new();
+    	let mut top = array![
+	    	object!{
+	    		"category"=> "any",
+	    		"threads" => json::JsonValue::new_array()
+	    	}
+    	];
+	    for (i, ct) in ctypes.iter().enumerate() {
+	    	let ct2 = ct.to_string();
+	    	let ct3 = ct.to_string();
 		    categories.push(object!{
-		    	"category" => ct,
-		    	"articles" => json::JsonValue::new_array()
+		    	"category" => ct.to_string(),
+		    	"articles" => array!{}
 		    });
+		    top.push(object!{
+	    		"category" => ct2,
+	    		"threads"  => json::JsonValue::new_array()
+	    	});
+	    	ctypestree.insert(ct3, i+1);
 	    }
 	    
 	    for (key, items) in bert.entries() {
@@ -94,12 +118,14 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    		}
 	    	}
 	    }
+	    // println!("listing json items: {:?}", &json.entries().count());
 	    for (path, item) in json.entries() {
 	    	let org = !(item["org"].is_null());
 	    	let gpe = !(item["gpe"].is_null());
 	    	let person = !(item["person"].is_null());
 	    	let money = !(item["money"].is_null());
 	    	let art = !(item["art"].is_null());
+	    	let product = !(item["product"].is_null());
 	    	let igames = !(games[path].is_null());
 	    	let igov  = !(gov[path].is_null());
 	    	let isports  = !(sports[path].is_null());
@@ -110,42 +136,63 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    	let iscience  = !(science[path].is_null());
 	    	let imedicine  = !(medicine[path].is_null());
 	    	let itv  = !(tv[path].is_null());
-
 	    	let mut is_news:bool = false;
+			let re2 = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+	    	let title2 = re2.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
+	    	// println!("found item: {:?}, org: {}, gpe: {}, person: {}, money: {}, itech: {}, icorp: {}, isports: {}, iproduct: {}", &title2, &org, &gpe, &person, &money, &itech, &icorp, &isports, &product);
 			
 			//SOCIETY
-			if org && (gpe || igov) {
+			if org && (gpe || igov || icorp || money || art || person) {
+				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
 				categories[0]["articles"].push(path);
+				ncategories.insert(title, "society".to_string());
 			}
 
 			//ECONOMY
-			if (org || gpe || person || igov) && money {
+			if !is_news && money {
+				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
 				categories[1]["articles"].push(path);
+				ncategories.insert(title, "economy".to_string());
 			}
 
 			//TECH
-			if itech && (icorp || org) {
+			if !is_news && (itech || product) {
+				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
 				categories[2]["articles"].push(path);
+				ncategories.insert(title, "technology".to_string());
 			}
 
 			//SPORTS
-			if isports {
+			if !is_news && isports {
+				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
 				categories[3]["articles"].push(path);
+				ncategories.insert(title, "sports".to_string());
 			}
 
 			//ENTERTAINMENT
-			if art || igames || imusic || ibook || itv  {
+			if !is_news && (art || igames || imusic || ibook || itv)  {
+				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
 				categories[4]["articles"].push(path);
+				ncategories.insert(title, "entertainment".to_string());
 			}
 
-			if iscience || imedicine {
+			//SCIENCE
+			if !is_news && (iscience || imedicine) {
+				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
+		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
 				categories[5]["articles"].push(path);
+				ncategories.insert(title, "science".to_string());
 			}
 
 			//NEWS
@@ -159,6 +206,7 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 			}
 
 	    }
+	    // println!("BTreeMap ncategories {:?}", ncategories);
 	    if query == "news" {
 	    	println!("{}", news.pretty(2));
 	    }
@@ -172,25 +220,57 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	    || query == "debug" {
 		    let self_occurences = find_self_occurences(index.clone(), schema.clone(), names_db);
 	    	let mut thr = json::JsonValue::new_array();
-
-		    for (path, items) in self_occurences.entries() {
+	    	let mut threads_result:JsonValue = json::JsonValue::new_array();
+		    for (title, items) in self_occurences.entries() {
+				let re = Regex::new(r"/[^A-Za-z0-9]/").unwrap();
+		    	let title2 = re.replace_all(&String::from(title).to_lowercase(), "").to_string();
 		    	if items.len() < 2 {
 		    		continue;
 		    	}
 		    	else {
 		    		let mut articles = object!{
-				    	"title" => path,
+				    	"title" => title,
 				    	"articles" => json::JsonValue::new_array()
 				    };
 				    for i in items.members() {
 				    	let ii = i.to_string();
 				    	articles["articles"].push(ii);
 				    }
-		    		thr.push(articles);
+				    if query == "top" {
+				    	let other = &"other".to_string();
+				    	let mut category = ncategories.get(&title2);
+				    	if category == None {
+				    		category = Some(other);
+				    	}
+				    	let catindex = (ctypes.iter().position(|&r| r == category.unwrap().to_string()).unwrap() + 1);
+				    	// println!("cat index: {:?} for cat {}", &catindex, &category);
+				    	articles["category"] = json::JsonValue::String(category.unwrap().to_string());
+				    	let articles2 = json::parse(&articles.dump()).unwrap();
+				    	let articles3 = json::parse(&articles.dump()).unwrap();
+
+				    	top[0]["threads"].push(articles2);
+				    	top[catindex]["threads"].push(articles3);
+				    }
+			    	thr.push(articles);
+				    
 		    	}
 		    }
+		    let mut vecthr:Vec<&JsonValue> = thr.members().collect();
+		    vecthr.sort_by(|a,b| {
+		    	let ai:usize = a["articles"].members().count();
+		    	let bi:usize = b["articles"].members().count();
+		    	bi.cmp(&ai)
+		    });
+
+		    for v in &vecthr {
+		    	let vv = json::parse(&v.pretty(1)).unwrap();
+		    	threads_result.push(vv);
+		    }
 		    if query == "threads" {
-		    	println!("{}", thr.pretty(2));
+	    		println!("{}", threads_result.pretty(2));
+		    }
+		    if query == "top" {
+	    		println!("{}", top.pretty(2));
 		    }
 	    }
 
@@ -199,6 +279,7 @@ pub fn start_bigquery_service(index:Arc<Mutex<Index>>, db:Arc<Mutex<JsonValue>>,
 	});
 	pool.join();
 }
+
 
 fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tname:&str) -> JsonValue {
 
@@ -219,8 +300,9 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 			let query_parser = QueryParser::for_index(&index, vec![title, body]);
 			
 			for word in theme {
-				let q:&str = word.as_str();
-				let query = query_parser.parse_query(q);
+				let re = Regex::new(r"/[^A-Za-z0-9]/").unwrap();
+				let q = re.replace_all(word.as_str(), "").to_string();
+				let query = query_parser.parse_query(&q);
 			    match query {
 			    	Ok(query) => {
 						let top_docs: Vec<(Score, DocAddress)> =
@@ -229,7 +311,7 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 						for (sc, doc_address) in top_docs {
 							let mut min_score = 15;
 							if &tname != &"games" {
-								min_score = 10;
+								min_score = 8;
 							}
 							if sc >= min_score as f32 {
 							    let retrieved_doc = searcher.doc(doc_address);
@@ -242,7 +324,7 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 							    		j[keystr] = js;
 							    	},
 							    	Err(err) => {
-
+							    		continue;
 							    	}
 							    }
 							}
@@ -297,7 +379,7 @@ fn find_self_occurences(_index:Arc<Mutex<Index>>, schema:Schema, names_db:Arc<Mu
 							let top_docs: Vec<(Score, DocAddress)> =
 						    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
 							for (sc, doc_address) in top_docs {
-								let mut min_score = 25;
+								let mut min_score = 15;
 								if sc >= min_score as f32 {
 								    let retrieved_doc = searcher.doc(doc_address);
 								    match retrieved_doc {
@@ -313,14 +395,13 @@ fn find_self_occurences(_index:Arc<Mutex<Index>>, schema:Schema, names_db:Arc<Mu
 								    		j[q].push(keystr);
 								    	},
 								    	Err(err) => {
-
+								    		continue;
 								    	}
 								    }
 								}
 					    	}
 					    },
 				    	Err(err) => {
-					    	// println!("query parsing error: {:?}", &err);
 					    	continue;
 				    	}
 					}

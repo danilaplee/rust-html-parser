@@ -196,8 +196,9 @@ pub fn load_games_glossary() -> Vec<String> {
 		|| ndata.contains(&name) {
 			continue;
 		}
+		let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
 		// let re = Regex::new(r#"[^a-zA-Z0-9]+"#).unwrap();
-		ndata.push(ms["name"].to_string());
+		ndata.push(re.replace_all(&ms["name"].to_string(), "").to_string());
 	}
 	return ndata;
 }
