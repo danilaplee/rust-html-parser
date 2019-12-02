@@ -86,7 +86,7 @@ pub fn visit_dirs(
 			    });
             } else {
 			    let args: Vec<String> = env::args().collect();
-			    let query = &args[1];;
+			    let query = &args[1];
 	            match parse_file(
 	            	&entry, 
 	            	q, 
@@ -180,9 +180,6 @@ pub fn parse_file(entry: &DirEntry,
 		    	// println!("language: {}", &key);
 		    	// println!("path: {}", &pstr);
 			}
-			if query == "languages" {
-				println!(r#"		{:?},"#, &pstr);
-			}
 	    }
 	    let lang_data = object!{
 	    	"h1" => h1,
@@ -190,11 +187,15 @@ pub fn parse_file(entry: &DirEntry,
 	    	"lang" => key
 	    };
 	    _pool.execute(move || {
-
+		    let args: Vec<String> = env::args().collect();
+		    let query = &args[1];
 		    let mut lock = queue.try_lock();
-
+		    let mut comma = ",";
 		    if let Ok(ref mut mtx) = lock {
 		        // println!("total queue length: {:?}", mtx.len());
+		        if mtx.len() == 0 {
+		        	comma = "";
+		        }
 		       	mtx.push_back(json::parse(&lang_data.dump()).unwrap());
 		    } else {
 		        // println!("parser 1 try_lock failed");
@@ -209,6 +210,11 @@ pub fn parse_file(entry: &DirEntry,
 			        // println!("parser 2 try_lock failed");
 			    }
 			    drop(lock2);
+		    }
+		    else {
+				if query == "languages" {
+					println!(r#"		{}{:?}"#,&comma, &pstr);
+				}
 		    }
 
 		    let mut lock3 = names_db.try_lock();

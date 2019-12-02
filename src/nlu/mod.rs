@@ -166,7 +166,7 @@ pub fn run_nlu_listener() -> Result<(), Box<dyn std::error::Error + 'static>> {
 			        }
 			        if e.to_string() == r#"Response was of incompatible type: "Not a bulk response" (response was nil)"# {
 				        if query == "debug" {
-				        	println!("end of line");
+				        	// println!("end of line");
 				        }
 					    let _ : () = con.publish(tgnews_nlu_end, "done".to_string()).unwrap();
 					    return;

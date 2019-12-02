@@ -70,7 +70,7 @@ fn main() {
     let ws_pool 								= ThreadPool::with_name("ws_pool".into(), 1);
     let mut bduration 							= Instant::now().elapsed();
     let mut disable_python 						= true;
-    let matches = App::new("TGNEWS").version("0.7.1")
+    let matches = App::new("TGNEWS").version("0.9.1")
         .args(&[
             Arg::with_name("query").index(1).help("options are: debug, languages, news, categories, threads, top"),
             Arg::with_name("filename").index(2).help("directory path: ./DataClusteringSample0817/"),
@@ -96,7 +96,7 @@ fn main() {
     //SETUP DEBUG
 	if query == "debug" {
 
-	    println!("=============== RUNNING TGNEWS v0.7.9 ===============");
+	    println!("=============== RUNNING TGNEWS v0.9.1 ===============");
 	    println!("=============== START TIME {} ===============", Utc::now());
 	    println!("Searching for {}", query);
 	    println!("In folder {}", filename);

@@ -10,7 +10,6 @@ use std::thread;
 use std::io::BufReader;
 use std::process::{Command, Stdio};
 use std::collections::VecDeque;
-use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
 use regex::Regex;

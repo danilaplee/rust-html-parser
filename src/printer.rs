@@ -49,8 +49,14 @@ pub fn print_languages_end(ruDB:Arc<Mutex<Vec<String>>>) {
 	}
 ]"#;
 		println!("{}", lang_ru);
+		let mut first = true;
 		for item in rus_data {
-			println!(r#"		{:?}, "#, item);
+			let mut comma = ",";
+			if first {
+				comma = "";
+			}
+			println!(r#"		{}{:?} "#,comma, item);
+			first = false;
 		}
 		println!("{}", lang_end);
 }

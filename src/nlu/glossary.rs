@@ -12,7 +12,6 @@ use std::thread;
 use std::io::BufReader;
 use std::process::{Command, Stdio};
 use std::collections::VecDeque;
-use fuzzy_matcher::skim::{fuzzy_match, fuzzy_indices};
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
 use tantivy::{Index, IndexReader,ReloadPolicy, DocAddress, Score, doc};
@@ -61,6 +60,12 @@ pub fn start_bigquery_service(
 		let artg 			 	= librarian::load_art_glossary();
 		let terrorg 			= librarian::load_terror_glossary();
 		let opsg 				= librarian::load_ops_glossary();
+		let harm 				= find_bq_score(index.clone(), schema.clone(), 
+		&[
+			"murder".to_string(), "killed".to_string(), "убито".to_string(), 
+			"убийца".to_string(), "пострадал".to_string(), "hurt".to_string(), 
+			"unrest".to_string(), "manslaughter".to_string(), "attacks".to_string()
+		].to_vec(), "harm");
 	    let games 	 			= find_bq_score(index.clone(), schema.clone(), &gamesg, "games");
 	    let sports				= find_bq_score(index.clone(), schema.clone(), &sportsg, "sports");
 	    let corp				= find_bq_score(index.clone(), schema.clone(), &corpg, "corp");
@@ -120,29 +125,32 @@ pub fn start_bigquery_service(
 	    }
 	    // println!("listing json items: {:?}", &json.entries().count());
 	    for (path, item) in json.entries() {
-	    	let org = !(item["org"].is_null());
-	    	let gpe = !(item["gpe"].is_null());
-	    	let person = !(item["person"].is_null());
-	    	let money = !(item["money"].is_null());
-	    	let art = !(item["art"].is_null());
+	    	let org 	= !(item["org"].is_null());
+	    	let gpe 	= !(item["gpe"].is_null());
+	    	let person 	= !(item["person"].is_null());
+	    	let money 	= !(item["money"].is_null());
+	    	let art 	= !(item["art"].is_null());
 	    	let product = !(item["product"].is_null());
-	    	let igames = !(games[path].is_null());
-	    	let igov  = !(gov[path].is_null());
-	    	let isports  = !(sports[path].is_null());
-	    	let itech  = !(tech[path].is_null());
-	    	let icorp  = !(corp[path].is_null());
+	    	let loc 	= !(item["loc"].is_null());
+	    	let igames 	= !(games[path].is_null());
+	    	let igov  	= !(gov[path].is_null());
+	    	let isports = !(sports[path].is_null());
+	    	let itech  	= !(tech[path].is_null());
+	    	let icorp  	= !(corp[path].is_null());
 	    	let imusic  = !(music[path].is_null());
-	    	let ibook  = !(book[path].is_null());
-	    	let iscience  = !(science[path].is_null());
+	    	let ibook  	= !(book[path].is_null());
+	    	let iscience= !(science[path].is_null());
 	    	let imedicine  = !(medicine[path].is_null());
-	    	let itv  = !(tv[path].is_null());
+	    	let iharm  = !(harm[path].is_null());
+	    	let iterror = !(terror[path].is_null());
+	    	let itv  	= !(tv[path].is_null());
 	    	let mut is_news:bool = false;
 			let re2 = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
 	    	let title2 = re2.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 	    	// println!("found item: {:?}, org: {}, gpe: {}, person: {}, money: {}, itech: {}, icorp: {}, isports: {}, iproduct: {}", &title2, &org, &gpe, &person, &money, &itech, &icorp, &isports, &product);
 			
 			//SOCIETY
-			if org && (gpe || igov || icorp || money || art || person) {
+			if (gpe || igov || iterror || iharm || org) && (org || icorp || money || person || art || loc) {
 				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
 		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
@@ -151,7 +159,7 @@ pub fn start_bigquery_service(
 			}
 
 			//ECONOMY
-			if !is_news && money {
+			if !is_news && money && (icorp || itech || person || art ||  org || gpe || loc) {
 				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
 		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
@@ -160,7 +168,7 @@ pub fn start_bigquery_service(
 			}
 
 			//TECH
-			if !is_news && (itech || product) {
+			if !is_news && (itech || product || icorp) {
 				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
 		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
@@ -178,7 +186,7 @@ pub fn start_bigquery_service(
 			}
 
 			//ENTERTAINMENT
-			if !is_news && (art || igames || imusic || ibook || itv)  {
+			if !is_news && !iharm && (igames || imusic || ibook || itv) && !(igov || gpe || money || iterror)  {
 				let re = Regex::new(r"/[^A-Za-z0-9 ]/").unwrap();
 		    	let title = re.replace_all(&item["title"][0].to_string().to_lowercase(), "").to_string();
 				is_news = true;
@@ -319,12 +327,15 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 					    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
 
 						for (sc, doc_address) in top_docs {
-							let mut min_score = 15;
-							if &tname != &"games" {
-								min_score = 8;
+							let mut min_score = 8;
+							if &tname == &"games" {
+								min_score = 15;
 							}
 							if &tname == &"science" {
-								min_score = 10;
+								min_score = 9;
+							}
+							if &tname == &"harm" {
+								min_score = 5;
 							}
 							if sc >= min_score as f32 {
 							    let retrieved_doc = searcher.doc(doc_address);
@@ -392,7 +403,7 @@ fn find_self_occurences(_index:Arc<Mutex<Index>>, schema:Schema, names_db:Arc<Mu
 							let top_docs: Vec<(Score, DocAddress)> =
 						    searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
 							for (sc, doc_address) in top_docs {
-								let mut min_score = 15;
+								let min_score = 10;
 								if sc >= min_score as f32 {
 								    let retrieved_doc = searcher.doc(doc_address);
 								    match retrieved_doc {
