@@ -72,11 +72,11 @@ pub fn start_bigquery_service(
 	    let book 				= find_bq_score(index.clone(), schema.clone(), &bookg, "book");
 	    let terror 				= find_bq_score(index.clone(), schema.clone(), &terrorg, "terror");
 	    let tv 					= find_bq_score(index.clone(), schema.clone(), &tvg, "tv");
+	    let art 				= find_bq_score(index.clone(), schema.clone(), &artg, "art");
 	    let mut json 			= object!{};
 	    let mut news 			= object!{"articles"=>json::JsonValue::new_array()};
 	    let mut categories 		= json::JsonValue::new_array();
 	    let mut ncategories:BTreeMap<String, String> 	= BTreeMap::new();
-	    let mut graph 			= object!{};
 	    let ctypes 				= ["society", "economy", "technology", "sports", "entertainment", "science", "other"].to_vec();
 	    let mut ctypestree:BTreeMap<String, usize> = BTreeMap::new();
     	let mut top = array![
@@ -220,7 +220,6 @@ pub fn start_bigquery_service(
 	    || query == "debug" {
 		    let self_occurences = find_self_occurences(index.clone(), schema.clone(), names_db);
 	    	let mut thr = json::JsonValue::new_array();
-	    	let mut threads_result:JsonValue = json::JsonValue::new_array();
 		    for (title, items) in self_occurences.entries() {
 				let re = Regex::new(r"/[^A-Za-z0-9]/").unwrap();
 		    	let title2 = re.replace_all(&String::from(title).to_lowercase(), "").to_string();
@@ -243,7 +242,6 @@ pub fn start_bigquery_service(
 				    		category = Some(other);
 				    	}
 				    	let catindex = (ctypes.iter().position(|&r| r == category.unwrap().to_string()).unwrap() + 1);
-				    	// println!("cat index: {:?} for cat {}", &catindex, &category);
 				    	articles["category"] = json::JsonValue::String(category.unwrap().to_string());
 				    	let articles2 = json::parse(&articles.dump()).unwrap();
 				    	let articles3 = json::parse(&articles.dump()).unwrap();
@@ -252,25 +250,23 @@ pub fn start_bigquery_service(
 				    	top[catindex]["threads"].push(articles3);
 				    }
 			    	thr.push(articles);
-				    
 		    	}
 		    }
-		    let mut vecthr:Vec<&JsonValue> = thr.members().collect();
-		    vecthr.sort_by(|a,b| {
-		    	let ai:usize = a["articles"].members().count();
-		    	let bi:usize = b["articles"].members().count();
-		    	bi.cmp(&ai)
-		    });
-
-		    for v in &vecthr {
-		    	let vv = json::parse(&v.pretty(1)).unwrap();
-		    	threads_result.push(vv);
-		    }
 		    if query == "threads" {
+		    	let threads_result = sort_by_thread_count(&thr);
 	    		println!("{}", threads_result.pretty(2));
 		    }
 		    if query == "top" {
-	    		println!("{}", top.pretty(2));
+		    	let mut current = 0;
+		    	let mut ntop = array![];
+			    for gthreads in top.members() {
+			    	ntop[current] = object!{
+			    		"category" => gthreads["category"].to_string(),
+			    		"threads" => sort_by_thread_count(&gthreads["threads"])
+			    	};
+			    	current += 1;
+			    }
+	    		println!("{}", ntop.pretty(2));
 		    }
 	    }
 
@@ -279,7 +275,21 @@ pub fn start_bigquery_service(
 	});
 	pool.join();
 }
+fn sort_by_thread_count(thr:&JsonValue) -> JsonValue {
+	let mut threads_result:JsonValue = json::JsonValue::new_array();
+    let mut vecthr:Vec<&JsonValue> = thr.members().collect();
+    vecthr.sort_by(|a,b| {
+    	let ai:usize = a["articles"].members().count();
+    	let bi:usize = b["articles"].members().count();
+    	bi.cmp(&ai)
+    });
 
+    for v in &vecthr {
+    	let vv = json::parse(&v.pretty(1)).unwrap();
+    	threads_result.push(vv);
+    }
+    return threads_result;
+}
 
 fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tname:&str) -> JsonValue {
 
@@ -312,6 +322,9 @@ fn find_bq_score(_index:Arc<Mutex<Index>>, schema:Schema, theme:&Vec<String>, tn
 							let mut min_score = 15;
 							if &tname != &"games" {
 								min_score = 8;
+							}
+							if &tname == &"science" {
+								min_score = 10;
 							}
 							if sc >= min_score as f32 {
 							    let retrieved_doc = searcher.doc(doc_address);
