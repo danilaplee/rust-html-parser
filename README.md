@@ -1,6 +1,6 @@
 # TGNEWS
 
-## The binary is already in the folder - ./tgnews
+## The binary for debian is already in the folder - ./tgnews
 
 ### A telegram competition nlu news parser written in rust
 
@@ -26,7 +26,7 @@ this script accepts a folder of html files and finds languages, news, categories
 ```
 
 
-to run the optional python bert environment, install the following:
+to run the optional python bert environment, do the following:
 
 ```
 	apt-get install redis
